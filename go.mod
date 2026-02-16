@@ -1,8 +1,6 @@
 module github.com/mycophonic/flac
 
-go 1.23.2
-
-toolchain go1.24.5
+go 1.25.7
 
 require (
 	github.com/icza/bitio v1.1.0
