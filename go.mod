@@ -1,4 +1,4 @@
-module github.com/mewkiz/flac
+module github.com/mycophonic/flac
 
 go 1.23.2
 
