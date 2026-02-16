@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mewkiz/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/bits"
 )
 
 // A Subframe contains the encoded audio samples from one channel of an audio

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/mewkiz/flac/internal/hashutil/crc16"
-	"github.com/mewkiz/flac/internal/hashutil/crc8"
+	"github.com/mycophonic/flac/internal/hashutil/crc16"
+	"github.com/mycophonic/flac/internal/hashutil/crc8"
 )
 
 const readBufSize = 4096

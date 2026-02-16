@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/mewkiz/flac/frame"
-	"github.com/mewkiz/flac/meta"
+	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/meta"
 )
 
 // BenchmarkEncodeSyntheticAudio measures the performance of encoding synthetic

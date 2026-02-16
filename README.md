@@ -1,14 +1,17 @@
 NOTE:
 
-This is a working fork of the excellent github.com/mewkiz/flac library.
+This is a fork of the excellent github.com/mewkiz/flac library.
 
-The primary focus of the fork is on decoding performance.
+The primary focus of the fork is on decoding performance and experimentation.
 
 Compared to the reference C decoder implementation:
 - upstream: 3.8x slower
 - this fork: 1.9x slower
 
 All improvements in this fork should be upstreamed if deemed desirable by the maintainers.
+
+You should presumably use upstream and not this fork, unless performance
+is critical to you.
 
 # flac
 

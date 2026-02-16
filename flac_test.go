@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mewkiz/flac"
+	"github.com/mycophonic/flac"
 )
 
 func TestSkipID3v2(t *testing.T) {

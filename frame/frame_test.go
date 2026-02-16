@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/mewkiz/flac"
+	"github.com/mycophonic/flac"
 )
 
 var golden = []struct {

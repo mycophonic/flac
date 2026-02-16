@@ -9,8 +9,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/mewkiz/flac"
-	"github.com/mewkiz/flac/meta"
+	"github.com/mycophonic/flac"
+	"github.com/mycophonic/flac/meta"
 )
 
 var paths = []string{

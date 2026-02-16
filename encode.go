@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/flac/meta"
 	"github.com/mewkiz/pkg/errutil"
+	"github.com/mycophonic/flac/meta"
 )
 
 // An Encoder represents a FLAC encoder.

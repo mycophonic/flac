@@ -1,8 +1,8 @@
 package flac
 
 import (
-	"github.com/mewkiz/flac/frame"
-	iobits "github.com/mewkiz/flac/internal/bits"
+	"github.com/mycophonic/flac/frame"
+	iobits "github.com/mycophonic/flac/internal/bits"
 )
 
 // analyzeFixed selects the best fixed predictor (order 0-4) for the given
