@@ -492,9 +492,14 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 	}
 	partOrder := int(x)
 
-	// FLAC spec: block_size / (2^partition_order) must be >= predictor_order.
-	// A malformed file violating this produces negative sample counts per partition.
+	// FLAC spec: block_size must be evenly divisible by 2^partition_order, and
+	// block_size / (2^partition_order) must be >= predictor_order. Violating
+	// the first leaves a tail of residuals undecoded; violating the second
+	// produces negative sample counts per partition.
 	nparts := 1 << partOrder
+	if subframe.NSamples%nparts != 0 {
+		return fmt.Errorf("frame.Subframe.decodeRicePart: block size %d not evenly divisible by 2^%d partitions", subframe.NSamples, partOrder)
+	}
 	if subframe.NSamples/nparts < subframe.Order {
 		return fmt.Errorf("frame.Subframe.decodeRicePart: partition order %d too large for block size %d with predictor order %d", partOrder, subframe.NSamples, subframe.Order)
 	}
