@@ -3,6 +3,7 @@ package flac_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -366,7 +367,7 @@ func getSamples(stream *flac.Stream) ([]int32, error) {
 				break
 			}
 
-			return nil, errors.New("unable to parse audio frame of FLAC stream")
+			return nil, fmt.Errorf("unable to parse audio frame of FLAC stream: %w", err)
 		}
 
 		for _, subframe := range frame.Subframes {
