@@ -33,6 +33,7 @@ func (block *Block) parseCueSheet() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	cs := &CueSheet{
 		MCN: stringFromSZ(szMCN),
 	}
@@ -58,7 +59,9 @@ func (block *Block) parseCueSheet() error {
 	if x&0x7F != 0 {
 		return ErrInvalidPadding
 	}
+
 	lr := io.LimitReader(block.lr, 258)
+
 	zr := zeros{r: lr}
 	if _, err := io.Copy(io.Discard, zr); err != nil {
 		return err
@@ -69,12 +72,15 @@ func (block *Block) parseCueSheet() error {
 	if err := binary.Read(block.lr, binary.BigEndian, &x); err != nil {
 		return unexpected(err)
 	}
+
 	if x < 1 {
 		return errors.New("meta.Block.parseCueSheet: at least one track required")
 	}
+
 	if cs.IsCompactDisc && x > 100 {
 		return fmt.Errorf("meta.Block.parseCueSheet: number of CD-DA tracks (%d) exceeds 100", x)
 	}
+
 	cs.Tracks = make([]CueSheetTrack, x)
 	// Each track number within a cue sheet must be unique; use uniq to keep
 	// track.
@@ -96,21 +102,28 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 	if err := binary.Read(block.lr, binary.BigEndian, &track.Offset); err != nil {
 		return unexpected(err)
 	}
+
 	if cs.IsCompactDisc && track.Offset%588 != 0 {
-		return fmt.Errorf("meta.Block.parseCueSheet: CD-DA track offset (%d) must be evenly divisible by 588", track.Offset)
+		return fmt.Errorf(
+			"meta.Block.parseCueSheet: CD-DA track offset (%d) must be evenly divisible by 588",
+			track.Offset,
+		)
 	}
 
 	// 8 bits: Num.
 	if err := binary.Read(block.lr, binary.BigEndian, &track.Num); err != nil {
 		return unexpected(err)
 	}
+
 	if _, ok := uniq[track.Num]; ok {
 		return fmt.Errorf("meta.Block.parseCueSheet: duplicated track number %d", track.Num)
 	}
+
 	uniq[track.Num] = struct{}{}
 	if track.Num == 0 {
 		return errors.New("meta.Block.parseCueSheet: invalid track number (0)")
 	}
+
 	isLeadOut := i == len(cs.Tracks)-1
 	if cs.IsCompactDisc {
 		if !isLeadOut {
@@ -119,12 +132,18 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 			}
 		} else {
 			if track.Num != 170 {
-				return fmt.Errorf("meta.Block.parseCueSheet: invalid lead-out CD-DA track number; expected 170, got %d", track.Num)
+				return fmt.Errorf(
+					"meta.Block.parseCueSheet: invalid lead-out CD-DA track number; expected 170, got %d",
+					track.Num,
+				)
 			}
 		}
 	} else {
 		if isLeadOut && track.Num != 255 {
-			return fmt.Errorf("meta.Block.parseCueSheet: invalid lead-out track number; expected 255, got %d", track.Num)
+			return fmt.Errorf(
+				"meta.Block.parseCueSheet: invalid lead-out track number; expected 255, got %d",
+				track.Num,
+			)
 		}
 	}
 
@@ -133,6 +152,7 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 	if err != nil {
 		return unexpected(err)
 	}
+
 	track.ISRC = stringFromSZ(szISRC)
 
 	// 1 bit: IsAudio.
@@ -156,8 +176,10 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 	if x&0x3F != 0 {
 		return ErrInvalidPadding
 	}
+
 	lr := io.LimitReader(block.lr, 13)
 	zr := zeros{r: lr}
+
 	_, err = io.Copy(io.Discard, zr)
 	if err != nil {
 		return err
@@ -168,6 +190,7 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 	if err = binary.Read(block.lr, binary.BigEndian, &x); err != nil {
 		return unexpected(err)
 	}
+
 	if x < 1 {
 		if !isLeadOut {
 			return errors.New("meta.Block.parseCueSheet: at least one track index required")
@@ -175,6 +198,7 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 		// Lead-out track has no track indices to parse; return early.
 		return nil
 	}
+
 	track.Indicies = make([]CueSheetTrackIndex, x)
 	for i := range track.Indicies {
 		index := &track.Indicies[i]
@@ -191,22 +215,25 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 		// 3 bytes: reserved.
 		lr = io.LimitReader(block.lr, 3)
 		zr = zeros{r: lr}
+
 		_, err = io.Copy(io.Discard, zr)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 // stringFromSZ returns a copy of the given string terminated at the first
 // occurrence of a NULL character.
 func stringFromSZ(szStr string) string {
-	pos := strings.IndexByte(szStr, '\x00')
-	if pos == -1 {
+	before, _, ok := strings.Cut(szStr, "\x00")
+	if !ok {
 		return szStr
 	}
-	return string(szStr[:pos])
+
+	return string(before)
 }
 
 // CueSheetTrack contains the start offset of a track and other track specific

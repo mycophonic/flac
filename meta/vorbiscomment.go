@@ -32,6 +32,7 @@ func (block *Block) parseVorbisComment() (err error) {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	comment := new(VorbisComment)
 	block.Body = comment
 	comment.Vendor = vendor
@@ -41,12 +42,15 @@ func (block *Block) parseVorbisComment() (err error) {
 	if err = binary.Read(block.lr, binary.LittleEndian, &x); err != nil {
 		return unexpected(err)
 	}
+
 	if x > maxTags {
 		return fmt.Errorf("meta.Block.parseVorbisComment: %w, number of tags=%d", ErrDeclaredBlockTooBig, x)
 	}
+
 	if x < 1 {
 		return nil
 	}
+
 	comment.Tags = make([][2]string, x)
 	for i := range comment.Tags {
 		// 32 bits: vector length
@@ -62,12 +66,13 @@ func (block *Block) parseVorbisComment() (err error) {
 
 		// Parse tag, which has the following format:
 		//    NAME=VALUE
-		pos := strings.Index(vector, "=")
-		if pos == -1 {
+		before, after, ok := strings.Cut(vector, "=")
+		if !ok {
 			return fmt.Errorf("meta.Block.parseVorbisComment: unable to locate '=' in vector %q", vector)
 		}
-		comment.Tags[i][0] = vector[:pos]
-		comment.Tags[i][1] = vector[pos+1:]
+
+		comment.Tags[i][0] = before
+		comment.Tags[i][1] = after
 	}
 
 	return nil

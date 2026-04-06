@@ -11,6 +11,7 @@ func ReadByte(r io.Reader) (byte, error) {
 	if _, err := io.ReadFull(r, buf[:]); err != nil {
 		return 0, err
 	}
+
 	return buf[0], nil
 }
 
@@ -20,5 +21,6 @@ func WriteByte(w io.Writer, b byte) error {
 	if _, err := w.Write(buf[:]); err != nil {
 		return err
 	}
+
 	return nil
 }

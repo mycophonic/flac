@@ -14,6 +14,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 
 	// Phase 2: read k low bits inline.
 	var low uint64
+
 	if k > 0 {
 		if k <= br.n {
 			// Fast path: all k bits remain in the buffered byte from ReadUnary.
@@ -33,6 +34,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 
 			// Read remaining bits from buffer bytes (inlined Read logic).
 			nBytes := remaining / 8
+
 			nBits := remaining % 8
 			if nBits > 0 {
 				nBytes++
@@ -43,6 +45,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 			}
 
 			oldPos := br.pos
+
 			for range nBytes - 1 {
 				low <<= 8
 				low |= uint64(br.buf[br.pos])
@@ -68,5 +71,6 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 
 	// Phase 3: combine and ZigZag decode inline.
 	folded := uint32(high<<k | low)
+
 	return int32(folded>>1) ^ -int32(folded&1), nil
 }

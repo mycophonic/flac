@@ -24,14 +24,19 @@ func (block *Block) parseSeekTable() error {
 	if n < 1 {
 		return errors.New("meta.Block.parseSeekTable: at least one seek point is required")
 	}
+
 	if n > maxSeekPoints {
 		return fmt.Errorf("meta.parseSeekTable: %w, number of seekpoints: %d", ErrDeclaredBlockTooBig, n)
 	}
+
 	table := &SeekTable{Points: make([]SeekPoint, n)}
 	block.Body = table
+
 	var prev uint64
+
 	for i := range table.Points {
 		point := &table.Points[i]
+
 		err := binary.Read(block.lr, binary.BigEndian, point)
 		if err != nil {
 			return unexpected(err)
@@ -43,12 +48,17 @@ func (block *Block) parseSeekTable() error {
 		if i != 0 && sampleNum != PlaceholderPoint {
 			switch {
 			case sampleNum < prev:
-				return fmt.Errorf("meta.Block.parseSeekTable: invalid seek point order; sample number (%d) < prev (%d)", sampleNum, prev)
+				return fmt.Errorf(
+					"meta.Block.parseSeekTable: invalid seek point order; sample number (%d) < prev (%d)",
+					sampleNum,
+					prev,
+				)
 			case sampleNum == prev:
 				return fmt.Errorf("meta.Block.parseSeekTable: duplicate seek point with sample number (%d)", sampleNum)
 			}
 		}
 	}
+
 	return nil
 }
 

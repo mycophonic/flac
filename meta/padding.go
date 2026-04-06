@@ -12,6 +12,7 @@ import (
 func (block *Block) verifyPadding() error {
 	zr := zeros{r: block.lr}
 	_, err := io.Copy(io.Discard, zr)
+
 	return err
 }
 
@@ -29,10 +30,11 @@ type zeros struct {
 // Read returns an error if any byte read isn't zero.
 func (zr zeros) Read(p []byte) (n int, err error) {
 	n, err = zr.r.Read(p)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if p[i] != 0 {
 			return n, ErrInvalidPadding
 		}
 	}
+
 	return n, err
 }

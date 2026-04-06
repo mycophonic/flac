@@ -2,6 +2,7 @@
 package bits
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -74,7 +75,7 @@ func (br *Reader) needBytes(n int) error {
 			}
 
 			// Partial data available but not enough — unexpected EOF.
-			if br.available() > 0 && err == io.EOF {
+			if br.available() > 0 && errors.Is(err, io.EOF) {
 				return io.ErrUnexpectedEOF
 			}
 
@@ -175,7 +176,7 @@ func (br *Reader) Reset() {
 func (br *Reader) Seek(offset int64, whence int) (int64, error) {
 	seeker, ok := br.r.(io.Seeker)
 	if !ok {
-		return 0, fmt.Errorf("bits.Reader.Seek: underlying reader does not implement io.Seeker")
+		return 0, errors.New("bits.Reader.Seek: underlying reader does not implement io.Seeker")
 	}
 
 	// Position query: return logical position accounting for buffered data.
@@ -184,6 +185,7 @@ func (br *Reader) Seek(offset int64, whence int) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
+
 		return pos - int64(br.available()), nil
 	}
 

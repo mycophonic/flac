@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/icza/bitio"
+
 	"github.com/mycophonic/flac/internal/bits"
 )
 
@@ -12,7 +13,7 @@ func TestUnary(t *testing.T) {
 	buf := &bytes.Buffer{}
 	bw := bitio.NewWriter(buf)
 
-	for want := uint64(0); want < 1000; want++ {
+	for want := range uint64(1000) {
 		// Write unary
 		if err := bits.WriteUnary(bw, want); err != nil {
 			t.Fatalf("unable to write unary; %v", err)
@@ -24,6 +25,7 @@ func TestUnary(t *testing.T) {
 
 		// Read written unary
 		r := bits.NewReader(buf)
+
 		got, err := r.ReadUnary()
 		if err != nil {
 			t.Fatalf("unable to read unary; %v", err)

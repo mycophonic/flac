@@ -42,13 +42,16 @@ type StreamInfo struct {
 func (block *Block) parseStreamInfo() error {
 	// 16 bits: BlockSizeMin.
 	br := bits.NewReader(block.lr)
+
 	x, err := br.Read(16)
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x < 16 {
 		return fmt.Errorf("meta.Block.parseStreamInfo: invalid minimum block size (%d); expected >= 16", x)
 	}
+
 	si := new(StreamInfo)
 	block.Body = si
 	si.BlockSizeMin = uint16(x)
@@ -58,9 +61,11 @@ func (block *Block) parseStreamInfo() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x < 16 {
 		return fmt.Errorf("meta.Block.parseStreamInfo: invalid maximum block size (%d); expected >= 16", x)
 	}
+
 	si.BlockSizeMax = uint16(x)
 
 	// 24 bits: FrameSizeMin.
@@ -68,6 +73,7 @@ func (block *Block) parseStreamInfo() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	si.FrameSizeMin = uint32(x)
 
 	// 24 bits: FrameSizeMax.
@@ -75,6 +81,7 @@ func (block *Block) parseStreamInfo() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	si.FrameSizeMax = uint32(x)
 
 	// 20 bits: SampleRate.
@@ -82,9 +89,11 @@ func (block *Block) parseStreamInfo() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x == 0 {
 		return errors.New("meta.Block.parseStreamInfo: invalid sample rate (0)")
 	}
+
 	si.SampleRate = uint32(x)
 
 	// 3 bits: NChannels.
@@ -113,5 +122,6 @@ func (block *Block) parseStreamInfo() error {
 	// Read through the bit reader since its internal buffer may have already
 	// consumed these bytes from block.lr.
 	err = br.ReadAligned(si.MD5sum[:])
+
 	return unexpected(err)
 }

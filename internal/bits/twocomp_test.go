@@ -21,6 +21,7 @@ func TestIntN(t *testing.T) {
 		got := IntN(g.x, g.n)
 		if g.want != got {
 			t.Errorf("result mismatch of IntN(x=0b%03b, n=%d); expected %d, got %d", g.x, g.n, g.want, got)
+
 			continue
 		}
 	}

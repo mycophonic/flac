@@ -23,5 +23,6 @@ func IntN(x uint64, n uint) int64 {
 	// negative.
 	v := int64(x ^ signBitMask) // clear sign bit.
 	v -= int64(signBitMask)
+
 	return v
 }

@@ -40,7 +40,10 @@ var golden = []test{
 	{0x0D73, "You remind me of a TV show, but that's all right: I watch it anyway."},
 	{0xEE65, "C is as portable as Stonehedge!!"},
 	{0xA94E, "Even if I could be Shakespeare, I think I should still choose to be Faraday. - A. Huxley"},
-	{0x0B98, "The fugacity of a constituent in a mixture of gases at a given temperature is proportional to its mole fraction.  Lewis-Randall Rule"},
+	{
+		0x0B98,
+		"The fugacity of a constituent in a mixture of gases at a given temperature is proportional to its mole fraction.  Lewis-Randall Rule",
+	},
 	{0xF560, "How can you write a big system without C++?  -Paul Glick"},
 	{0x60AE, "The quick brown fox jumps over the lazy dog"},
 }
@@ -50,8 +53,10 @@ func TestCrc16IBM(t *testing.T) {
 		h := NewIBM()
 		if _, err := io.WriteString(h, g.in); err != nil {
 			t.Error(err)
+
 			continue
 		}
+
 		got := h.Sum16()
 		if got != g.want {
 			t.Errorf("IBM(%q); expected 0x%04X, got 0x%04X.", g.in, g.want, got)
@@ -60,7 +65,7 @@ func TestCrc16IBM(t *testing.T) {
 }
 
 func BenchmarkNewIBM(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		NewIBM()
 	}
 }
@@ -87,20 +92,26 @@ func BenchmarkCrc16_16K(b *testing.B) {
 
 func benchmarkCrc16(b *testing.B, count int64) {
 	b.SetBytes(count)
+
 	data := make([]byte, count)
 	for i := range data {
 		data[i] = byte(i)
 	}
+
 	h := NewIBM()
 	in := make([]byte, 0, h.Size())
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		h.Reset()
+
 		if _, err := h.Write(data); err != nil {
 			b.Error(err)
+
 			continue
 		}
+
 		h.Sum(in)
 	}
 }

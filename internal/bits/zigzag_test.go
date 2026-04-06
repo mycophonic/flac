@@ -21,6 +21,7 @@ func TestDecodeZigZag(t *testing.T) {
 		got := DecodeZigZag(g.x)
 		if g.want != got {
 			t.Errorf("result mismatch of DecodeZigZag(x=%d); expected %d, got %d", g.x, g.want, got)
+
 			continue
 		}
 	}
@@ -43,6 +44,7 @@ func TestEncodeZigZag(t *testing.T) {
 		got := EncodeZigZag(g.x)
 		if g.want != got {
 			t.Errorf("result mismatch of EncodeZigZag(x=%d); expected %d, got %d", g.x, g.want, got)
+
 			continue
 		}
 	}

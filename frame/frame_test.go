@@ -3,6 +3,7 @@ package frame_test
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"io"
 	"testing"
 
@@ -51,14 +52,18 @@ var golden = []struct {
 	{path: "../testdata/flac-test-files/subset/22 - 12 bit per sample.flac"},
 	{path: "../testdata/flac-test-files/subset/23 - 8 bit per sample.flac"},
 	{path: "../testdata/flac-test-files/subset/24 - variable blocksize file created with flake revision 264.flac"},
-	{path: "../testdata/flac-test-files/subset/25 - variable blocksize file created with flake revision 264, modified to create smaller blocks.flac"},
+	{
+		path: "../testdata/flac-test-files/subset/25 - variable blocksize file created with flake revision 264, modified to create smaller blocks.flac",
+	},
 	{path: "../testdata/flac-test-files/subset/26 - variable blocksize file created with CUETools.Flake 2.1.6.flac"},
 	{path: "../testdata/flac-test-files/subset/27 - old format variable blocksize file created with Flake 0.11.flac"},
 	{path: "../testdata/flac-test-files/subset/28 - high resolution audio, default settings.flac"},
 	{path: "../testdata/flac-test-files/subset/29 - high resolution audio, blocksize 16384.flac"},
 	{path: "../testdata/flac-test-files/subset/30 - high resolution audio, blocksize 13456.flac"},
 	{path: "../testdata/flac-test-files/subset/31 - high resolution audio, using only 32nd order predictors.flac"},
-	{path: "../testdata/flac-test-files/subset/32 - high resolution audio, partition order 8 containing escaped partitions.flac"},
+	{
+		path: "../testdata/flac-test-files/subset/32 - high resolution audio, partition order 8 containing escaped partitions.flac",
+	},
 	{path: "../testdata/flac-test-files/subset/33 - samplerate 192kHz.flac"},
 	{path: "../testdata/flac-test-files/subset/34 - samplerate 192kHz, using only 32nd order predictors.flac"},
 	{path: "../testdata/flac-test-files/subset/35 - samplerate 134560Hz.flac"},
@@ -70,7 +75,9 @@ var golden = []struct {
 	{path: "../testdata/flac-test-files/subset/41 - 6 channels (5.1).flac"},
 	{path: "../testdata/flac-test-files/subset/42 - 7 channels (6.1).flac"},
 	{path: "../testdata/flac-test-files/subset/43 - 8 channels (7.1).flac"},
-	{path: "../testdata/flac-test-files/subset/44 - 8-channel surround, 192kHz, 24 bit, using only 32nd order predictors.flac"},
+	{
+		path: "../testdata/flac-test-files/subset/44 - 8-channel surround, 192kHz, 24 bit, using only 32nd order predictors.flac",
+	},
 	{path: "../testdata/flac-test-files/subset/45 - no total number of samples set.flac"},
 	{path: "../testdata/flac-test-files/subset/46 - no min-max framesize set.flac"},
 	{path: "../testdata/flac-test-files/subset/47 - only STREAMINFO.flac"},
@@ -89,13 +96,15 @@ var golden = []struct {
 	{path: "../testdata/flac-test-files/subset/60 - mono audio.flac"},
 	{path: "../testdata/flac-test-files/subset/61 - predictor overflow check, 16-bit.flac"},
 	{path: "../testdata/flac-test-files/subset/62 - predictor overflow check, 20-bit.flac"},
-	// TODO: fix decoding of "subset/63 - ...flac": MD5 checksum mismatch for decoded audio samples; expected e4e4a6b3a672a849a3e2157c11ad23c6, got a0343afaaaa6229266d78ccf3175eb8d
+	// TODO: fix decoding of "subset/63 - ...flac": MD5 checksum mismatch for decoded audio samples; expected
+	// e4e4a6b3a672a849a3e2157c11ad23c6, got a0343afaaaa6229266d78ccf3175eb8d
 	{path: "../testdata/flac-test-files/subset/63 - predictor overflow check, 24-bit.flac"},
 	{path: "../testdata/flac-test-files/subset/64 - rice partitions with escape code zero.flac"},
 }
 
 func TestFrameHash(t *testing.T) {
 	var zeroHash [md5.Size]byte
+
 	for _, g := range golden {
 		t.Run(g.path, func(t *testing.T) {
 			stream, err := flac.Open(g.path)
@@ -108,26 +117,37 @@ func TestFrameHash(t *testing.T) {
 			want := stream.Info.MD5sum[:]
 			if bytes.Equal(want, zeroHash[:]) {
 				t.Skipf("path=%q, skipping frame hash test as no MD5 hash was set in StreamInfo", g.path)
+
 				return
 			}
 
 			md5sum := md5.New()
+
 			for frameNum := 0; ; frameNum++ {
 				frame, err := stream.ParseNext()
 				if err != nil {
-					if err == io.EOF {
+					if errors.Is(err, io.EOF) {
 						break
 					}
+
 					t.Errorf("path=%q, frameNum=%d: error while parsing frame; %v", g.path, frameNum, err)
+
 					continue
 				}
+
 				frame.Hash(md5sum)
 			}
+
 			got := md5sum.Sum(nil)
 			// Verify the decoded audio samples by comparing the MD5 checksum that is
 			// stored in StreamInfo with the computed one.
 			if !bytes.Equal(got, want) {
-				t.Errorf("path=%q: MD5 checksum mismatch for decoded audio samples; expected %32x, got %32x", g.path, want, got)
+				t.Errorf(
+					"path=%q: MD5 checksum mismatch for decoded audio samples; expected %32x, got %32x",
+					g.path,
+					want,
+					got,
+				)
 			}
 		})
 	}
@@ -139,21 +159,24 @@ func BenchmarkFrameParse(b *testing.B) {
 	// in the repository, but is available for download at
 	//
 	//    http://freesound.org/people/jarfil/sounds/151185/
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		stream, err := flac.Open("../testdata/benchmark/151185.flac")
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		for {
 			_, err := stream.ParseNext()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
+
 				stream.Close()
 				b.Fatal(err)
 			}
 		}
+
 		stream.Close()
 	}
 }
@@ -164,23 +187,28 @@ func BenchmarkFrameHash(b *testing.B) {
 	// in the repository, but is available for download at
 	//
 	//    http://freesound.org/people/jarfil/sounds/151185/
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		stream, err := flac.Open("../testdata/benchmark/151185.flac")
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		md5sum := md5.New()
+
 		for {
 			frame, err := stream.ParseNext()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
+
 				stream.Close()
 				b.Fatal(err)
 			}
+
 			frame.Hash(md5sum)
 		}
+
 		stream.Close()
 		want := stream.Info.MD5sum[:]
 		got := md5sum.Sum(nil)

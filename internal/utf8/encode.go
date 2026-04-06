@@ -13,6 +13,7 @@ func Encode(w io.Writer, x uint64) error {
 		if err := ioutilx.WriteByte(w, byte(x)); err != nil {
 			return err
 		}
+
 		return nil
 	}
 
@@ -23,6 +24,7 @@ func Encode(w io.Writer, x uint64) error {
 		// bits of c0.
 		bits uint64
 	)
+
 	switch {
 	case x <= rune2Max:
 		// if c0 == 110xxxxx
@@ -52,8 +54,11 @@ func Encode(w io.Writer, x uint64) error {
 	case x <= rune7Max:
 		// if c0 == 11111110
 		// total: 36 bits (0 + 6 + 6 + 6 + 6 + 6 + 6)
+		// The leading byte has no payload bits — all 8 bits are the prefix
+		// marker (t7 = 0xFE). The full 36-bit value lives entirely in the
+		// 6 continuation bytes.
 		l = 6
-		bits = 0
+		bits = t7
 	}
 	// Store bits of c0.
 	if err := ioutilx.WriteByte(w, byte(bits)); err != nil {
@@ -67,5 +72,6 @@ func Encode(w io.Writer, x uint64) error {
 			return err
 		}
 	}
+
 	return nil
 }

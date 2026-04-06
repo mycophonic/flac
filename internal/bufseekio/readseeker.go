@@ -31,11 +31,14 @@ func NewReadSeekerSize(rd io.ReadSeeker, size int) *ReadSeeker {
 	if ok && len(b.buf) >= size {
 		return b
 	}
+
 	if size < minReadBufferSize {
 		size = minReadBufferSize
 	}
+
 	r := new(ReadSeeker)
 	r.reset(make([]byte, size), rd)
+
 	return r
 }
 
@@ -56,6 +59,7 @@ func (b *ReadSeeker) reset(buf []byte, r io.ReadSeeker) {
 func (b *ReadSeeker) readErr() error {
 	err := b.err
 	b.err = nil
+
 	return err
 }
 
@@ -72,12 +76,15 @@ func (b *ReadSeeker) Read(p []byte) (n int, err error) {
 		if b.buffered() > 0 {
 			return 0, nil
 		}
+
 		return 0, b.readErr()
 	}
+
 	if b.r == b.w {
 		if b.err != nil {
 			return 0, b.readErr()
 		}
+
 		if len(p) >= len(b.buf) {
 			// Large read, empty buffer.
 			// Read directly into p to avoid copy.
@@ -85,20 +92,25 @@ func (b *ReadSeeker) Read(p []byte) (n int, err error) {
 			if n < 0 {
 				panic(errNegativeRead)
 			}
+
 			b.pos += int64(n)
+
 			return n, b.readErr()
 		}
 		// One read.
 		b.pos += int64(b.r)
 		b.r = 0
 		b.w = 0
+
 		n, b.err = b.rd.Read(b.buf)
 		if n < 0 {
 			panic(errNegativeRead)
 		}
+
 		if n == 0 {
 			return 0, b.readErr()
 		}
+
 		b.w += n
 	}
 
@@ -107,6 +119,7 @@ func (b *ReadSeeker) Read(p []byte) (n int, err error) {
 	// the underlying reader returned a bad count. See issue 49795.
 	n = copy(p, b.buf[b.r:b.w])
 	b.r += n
+
 	return n, nil
 }
 
@@ -132,6 +145,7 @@ func (b *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	// Check if the offset is within buf.
 	if abs >= b.pos && abs < b.pos+int64(b.w) {
 		b.r = int(abs - b.pos)
+
 		return abs, nil
 	}
 
@@ -141,8 +155,11 @@ func (b *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 func (b *ReadSeeker) seek(offset int64, whence int) (int64, error) {
 	b.r = 0
 	b.w = 0
+
 	var err error
+
 	b.pos, err = b.rd.Seek(offset, whence)
+
 	return b.pos, err
 }
 

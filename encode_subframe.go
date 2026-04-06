@@ -1,9 +1,11 @@
 package flac
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/icza/bitio"
+
 	"github.com/mycophonic/flac/frame"
 	iobits "github.com/mycophonic/flac/internal/bits"
 )
@@ -54,6 +56,7 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 	default:
 		return fmt.Errorf("support for prediction method %v not yet implemented", subframe.Pred)
 	}
+
 	return nil
 }
 
@@ -75,6 +78,7 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 	//     01xxxx : reserved
 	//     1xxxxx : SUBFRAME_LPC, xxxxx=order-1
 	var bits uint64
+
 	switch subHdr.Pred {
 	case frame.PredConstant:
 		// 000000 : SUBFRAME_CONSTANT
@@ -89,6 +93,7 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 		// 1xxxxx : SUBFRAME_LPC, xxxxx=order-1
 		bits = 0x20 | uint64(subHdr.Order-1)
 	}
+
 	if err := bw.WriteBits(bits, 6); err != nil {
 		return err
 	}
@@ -96,16 +101,19 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 	// <1+k> 'Wasted bits-per-sample' flag:
 	//
 	//     0 : no wasted bits-per-sample in source subblock, k=0
-	//     1 : k wasted bits-per-sample in source subblock, k-1 follows, unary coded; e.g. k=3 => 001 follows, k=7 => 0000001 follows.
+	// 1 : k wasted bits-per-sample in source subblock, k-1 follows, unary coded; e.g. k=3 => 001 follows, k=7 =>
+	// 0000001 follows.
 	hasWastedBits := subHdr.Wasted > 0
 	if err := bw.WriteBool(hasWastedBits); err != nil {
 		return err
 	}
+
 	if hasWastedBits {
 		if err := iobits.WriteUnary(bw, uint64(subHdr.Wasted-1)); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -114,6 +122,7 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 // encodeConstantSamples stores the given constant sample, writing to bw.
 func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe, bps uint) error {
 	samples := subframe.Samples
+
 	sample := samples[0]
 	for _, s := range samples[1:] {
 		if sample != s {
@@ -124,6 +133,7 @@ func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -137,11 +147,13 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	if int(hdr.BlockSize) != len(samples) {
 		return fmt.Errorf("block size and sample count mismatch; expected %d, got %d", hdr.BlockSize, len(samples))
 	}
+
 	for _, sample := range samples {
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -152,7 +164,7 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe, bps uint) error {
 	// Encode unencoded warm-up samples.
 	samples := subframe.Samples
-	for i := 0; i < subframe.Order; i++ {
+	for i := range subframe.Order {
 		sample := samples[i]
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
@@ -162,6 +174,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	// Compute residuals (signal errors of the prediction) between audio
 	// samples and LPC predicted audio samples.
 	const shift = 0
+
 	residuals, err := getLPCResiduals(subframe, frame.FixedCoeffs[subframe.Order], shift)
 	if err != nil {
 		return err
@@ -171,6 +184,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	if err := encodeResiduals(bw, subframe, residuals); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -181,7 +195,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe, bps uint) error {
 	// Encode unencoded warm-up samples.
 	samples := subframe.Samples
-	for i := 0; i < subframe.Order; i++ {
+	for i := range subframe.Order {
 		sample := samples[i]
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
@@ -217,6 +231,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	if err := encodeResiduals(bw, subframe, residuals); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -240,7 +255,10 @@ func encodeResiduals(bw *bitio.Writer, subframe *frame.Subframe, residuals []int
 	case frame.ResidualCodingMethodRice2:
 		return encodeRicePart(bw, subframe, 5, residuals)
 	default:
-		return fmt.Errorf("encodeResiduals: reserved residual coding method bit pattern (%02b)", uint8(subframe.ResidualCodingMethod))
+		return fmt.Errorf(
+			"encodeResiduals: reserved residual coding method bit pattern (%02b)",
+			uint8(subframe.ResidualCodingMethod),
+		)
 	}
 }
 
@@ -250,8 +268,29 @@ func encodeResiduals(bw *bitio.Writer, subframe *frame.Subframe, residuals []int
 // ref: https://www.xiph.org/flac/format.html#partitioned_rice
 // ref: https://www.xiph.org/flac/format.html#partitioned_rice2
 func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, residuals []int32) error {
-	// 4 bits: Partition order.
 	riceSubframe := subframe.RiceSubframe
+	partOrder := riceSubframe.PartOrder
+	nparts := 1 << partOrder
+
+	// Validate before writing anything to the bitstream. PartOrder is what
+	// the decoder uses to determine how many partitions to read, so the
+	// length of Partitions must match exactly.
+	if len(riceSubframe.Partitions) != nparts {
+		return fmt.Errorf(
+			"encodeRicePart: partition count mismatch; PartOrder=%d implies %d partitions, got %d",
+			partOrder, nparts, len(riceSubframe.Partitions),
+		)
+	}
+	// FLAC spec: block_size must be evenly divisible by 2^partition_order.
+	// Same constraint enforced on the decode side.
+	if subframe.NSamples%nparts != 0 {
+		return fmt.Errorf(
+			"encodeRicePart: block size %d not evenly divisible by 2^%d partitions",
+			subframe.NSamples, partOrder,
+		)
+	}
+
+	// 4 bits: Partition order.
 	if err := bw.WriteBits(uint64(riceSubframe.PartOrder), 4); err != nil {
 		return err
 	}
@@ -260,9 +299,8 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 	//
 	// ref: https://www.xiph.org/flac/format.html#rice_partition
 	// ref: https://www.xiph.org/flac/format.html#rice2_partition
-	partOrder := riceSubframe.PartOrder
-	nparts := 1 << partOrder
 	curResidualIndex := 0
+
 	for i := range riceSubframe.Partitions {
 		partition := &riceSubframe.Partitions[i]
 		// (4 or 5) bits: Rice parameter.
@@ -287,7 +325,8 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 			if err := bw.WriteBits(uint64(partition.EscapedBitsPerSample), 5); err != nil {
 				return err
 			}
-			for j := 0; j < nsamples; j++ {
+
+			for range nsamples {
 				// ref: https://datatracker.ietf.org/doc/draft-ietf-cellar-flac/
 				//
 				// From section 9.2.7.1.  Escaped partition:
@@ -298,17 +337,20 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 				// represented as 0b111.
 				residual := residuals[curResidualIndex]
 				curResidualIndex++
+
 				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil {
 					return err
 				}
 			}
+
 			continue
 		}
 
 		// Encode the Rice residuals of the partition.
-		for j := 0; j < nsamples; j++ {
+		for range nsamples {
 			residual := residuals[curResidualIndex]
 			curResidualIndex++
+
 			if err := encodeRiceResidual(bw, param, residual); err != nil {
 				return err
 			}
@@ -338,6 +380,7 @@ func encodeRiceResidual(bw *bitio.Writer, k uint, residual int32) error {
 	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -347,22 +390,36 @@ func encodeRiceResidual(bw *bitio.Writer, k uint, residual int32) error {
 // i.e. len(coeffs)) of unencoded warm-up samples.
 func getLPCResiduals(subframe *frame.Subframe, coeffs []int32, shift int32) ([]int32, error) {
 	if len(coeffs) != subframe.Order {
-		return nil, fmt.Errorf("getLPCResiduals: prediction order (%d) differs from number of coefficients (%d)", subframe.Order, len(coeffs))
+		return nil, fmt.Errorf(
+			"getLPCResiduals: prediction order (%d) differs from number of coefficients (%d)",
+			subframe.Order,
+			len(coeffs),
+		)
 	}
+
 	if shift < 0 {
-		return nil, fmt.Errorf("getLPCResiduals: invalid negative shift")
+		return nil, errors.New("getLPCResiduals: invalid negative shift")
 	}
+
 	if subframe.NSamples != len(subframe.Samples) {
-		return nil, fmt.Errorf("getLPCResiduals: subframe sample count mismatch; expected %d, got %d", subframe.NSamples, len(subframe.Samples))
+		return nil, fmt.Errorf(
+			"getLPCResiduals: subframe sample count mismatch; expected %d, got %d",
+			subframe.NSamples,
+			len(subframe.Samples),
+		)
 	}
+
 	var residuals []int32
+
 	for i := subframe.Order; i < subframe.NSamples; i++ {
 		var sample int64
 		for j, c := range coeffs {
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
+
 		residual := subframe.Samples[i] - int32(sample>>uint(shift))
 		residuals = append(residuals, residual)
 	}
+
 	return residuals, nil
 }

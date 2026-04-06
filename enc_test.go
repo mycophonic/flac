@@ -83,7 +83,7 @@ var paths = []string{
 	// (0b1100)`. Notably, the computed md5 hash of the decoded audio samples
 	// is identical (MD5: 3b2939b39ae7369b80451c77865e60c1). Thus, ignore the
 	// test case.
-	//"testdata/flac-test-files/subset/26 - variable blocksize file created with CUETools.Flake 2.1.6.flac",
+	// "testdata/flac-test-files/subset/26 - variable blocksize file created with CUETools.Flake 2.1.6.flac",
 	// NOTE: the only diff is that "27 - ...flac" uses `block_size: 0b111
 	// (end of header (16 bit))` to encode the block size at the end of the
 	// header, whereas mewkiz/flac encodes it directly `block_size: 4608
@@ -102,7 +102,7 @@ var paths = []string{
 	// whereas mewkiz/flac encodes it directly `192000 (0b11)`. Notably, the
 	// computed md5 hash of the decoded audio samples is identical
 	// (MD5: 942f56e503437dfd4c269c331774b2e3). Thus, ignore the test case.
-	//"testdata/flac-test-files/subset/34 - samplerate 192kHz, using only 32nd order predictors.flac",
+	// "testdata/flac-test-files/subset/34 - samplerate 192kHz, using only 32nd order predictors.flac",
 	"testdata/flac-test-files/subset/35 - samplerate 134560Hz.flac",
 	"testdata/flac-test-files/subset/36 - samplerate 384kHz.flac",
 	"testdata/flac-test-files/subset/37 - 20 bit per sample.flac",
@@ -117,7 +117,7 @@ var paths = []string{
 	// whereas mewkiz/flac encodes it directly `192000 (0b11)`. Notably, the
 	// computed md5 hash of the decoded audio samples is identical
 	// (MD5: cdf531d4d4b95233986bc499518a89db). Thus, ignore the test case.
-	//"testdata/flac-test-files/subset/44 - 8-channel surround, 192kHz, 24 bit, using only 32nd order predictors.flac",
+	// "testdata/flac-test-files/subset/44 - 8-channel surround, 192kHz, 24 bit, using only 32nd order predictors.flac",
 	"testdata/flac-test-files/subset/45 - no total number of samples set.flac",
 	"testdata/flac-test-files/subset/46 - no min-max framesize set.flac",
 	"testdata/flac-test-files/subset/47 - only STREAMINFO.flac",
@@ -155,20 +155,24 @@ func TestEncodeRoundTrip(t *testing.T) {
 
 			// Open encoder for FLAC stream.
 			out := new(bytes.Buffer)
+
 			enc, err := flac.NewEncoder(out, stream.Info, stream.Blocks...)
 			if err != nil {
 				t.Fatalf("%q: unable to create encoder for FLAC stream; %v", path, err)
 			}
+
 			enc.EnablePredictionAnalysis(false) // disable prediction analysis to support round-trip decode/encode test.
 			// Encode audio samples.
 			for {
 				frame, err := stream.ParseNext()
 				if err != nil {
-					if err == io.EOF {
+					if errors.Is(err, io.EOF) {
 						break
 					}
+
 					t.Fatalf("%q: unable to parse audio frame of FLAC stream; %v", path, err)
 				}
+
 				if err := enc.WriteFrame(frame); err != nil {
 					t.Fatalf("%q: unable to encode audio frame of FLAC stream; %v", path, err)
 				}
@@ -183,6 +187,7 @@ func TestEncodeRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%q: unable to read file; %v", path, err)
 			}
+
 			got := out.Bytes()
 			if !bytes.Equal(got, want) {
 				t.Fatalf("%q: content mismatch; expected % X, got % X", path, want, got)
@@ -194,6 +199,7 @@ func TestEncodeRoundTrip(t *testing.T) {
 func TestEncodeComment(t *testing.T) {
 	// Decode FLAC file.
 	const path = "meta/testdata/input-VA.flac"
+
 	src, err := flac.ParseFile(path)
 	if err != nil {
 		t.Fatalf("unable to parse input FLAC file; %v", err)
@@ -202,6 +208,7 @@ func TestEncodeComment(t *testing.T) {
 
 	// Add custom vorbis comment.
 	const want = "FLAC encoding test case"
+
 	for _, block := range src.Blocks {
 		if comment, ok := block.Body.(*meta.VorbisComment); ok {
 			comment.Vendor = want
@@ -210,6 +217,7 @@ func TestEncodeComment(t *testing.T) {
 
 	// Open encoder for FLAC stream.
 	out := new(bytes.Buffer)
+
 	enc, err := flac.NewEncoder(out, src.Info, src.Blocks...)
 	if err != nil {
 		t.Fatalf("%q: unable to create encoder for FLAC stream; %v", path, err)
@@ -218,11 +226,13 @@ func TestEncodeComment(t *testing.T) {
 	for {
 		frame, err := src.ParseNext()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			t.Fatalf("%q: unable to parse audio frame of FLAC stream; %v", path, err)
 		}
+
 		if err := enc.WriteFrame(frame); err != nil {
 			t.Fatalf("%q: unable to encode audio frame of FLAC stream; %v", path, err)
 		}
@@ -245,6 +255,7 @@ func TestEncodeComment(t *testing.T) {
 			got := comment.Vendor
 			if got != want {
 				t.Errorf("Vorbis comment mismatch; expected %q, got %q", want, got)
+
 				continue
 			}
 		}
@@ -266,20 +277,24 @@ func TestEncodeAnalysisFixed(t *testing.T) {
 
 			// Open encoder for FLAC stream.
 			out := new(bytes.Buffer)
+
 			enc, err := flac.NewEncoder(out, stream.Info, stream.Blocks...)
 			if err != nil {
 				t.Fatalf("%q: unable to create encoder for FLAC stream; %v", path, err)
 			}
+
 			enc.EnablePredictionAnalysis(true) // enable prediction encoding
 			// Encode audio samples.
 			for {
 				frame, err := stream.ParseNext()
 				if err != nil {
-					if err == io.EOF {
+					if errors.Is(err, io.EOF) {
 						break
 					}
+
 					t.Fatalf("%q: unable to parse audio frame of FLAC stream; %v", path, err)
 				}
+
 				if err := enc.WriteFrame(frame); err != nil {
 					t.Fatalf("%q: unable to encode audio frame of FLAC stream; %v", path, err)
 				}
@@ -294,10 +309,12 @@ func TestEncodeAnalysisFixed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%q: unable to parse FLAC file; %v", path, err)
 			}
+
 			wantSamples, err := getSamples(wantStream)
 			if err != nil {
 				t.Fatalf("%q: unable to get audio samples of FLAC file; %v", path, err)
 			}
+
 			if err := wantStream.Close(); err != nil {
 				t.Fatalf("%q: unable to close FLAC stream; %v", path, err)
 			}
@@ -306,18 +323,22 @@ func TestEncodeAnalysisFixed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%q: unable to stat FLAC file; %v", path, err)
 			}
+
 			wantSize := fi.Size()
 
 			gotBytes := out.Bytes()
 			gotSize := int64(len(gotBytes))
+
 			gotStream, err := flac.Parse(bytes.NewReader(gotBytes))
 			if err != nil {
 				t.Fatalf("%q: unable to parse encoded FLAC file; %v", path, err)
 			}
+
 			gotSamples, err := getSamples(gotStream)
 			if err != nil {
 				t.Fatalf("%q: unable to get audio samples of encoded FLAC file; %v", path, err)
 			}
+
 			if err := gotStream.Close(); err != nil {
 				t.Fatalf("%q: unable to close encoded FLAC stream; %v", path, err)
 			}
@@ -325,6 +346,7 @@ func TestEncodeAnalysisFixed(t *testing.T) {
 			if !slices.Equal(wantSamples, gotSamples) {
 				t.Fatalf("%q: content mismatch; expected %#v, got %#v", path, wantSamples, gotSamples)
 			}
+
 			percent := 100 * float64(gotSize) / float64(wantSize)
 			if wantSize != gotSize {
 				t.Logf("%q: input size: %d, output size: %d. ratio: %.02f%%", path, wantSize, gotSize, percent)
@@ -336,23 +358,28 @@ func TestEncodeAnalysisFixed(t *testing.T) {
 // getSamples returns all audio samples in stream.
 func getSamples(stream *flac.Stream) ([]int32, error) {
 	var out []int32
+
 	for {
 		frame, err := stream.ParseNext()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			return nil, errors.New("unable to parse audio frame of FLAC stream")
 		}
+
 		for _, subframe := range frame.Subframes {
 			out = append(out, subframe.Samples...)
 		}
 	}
+
 	return out, nil
 }
 
 // exists reports whether the given file or directory exists.
 func exists(path string) bool {
 	_, err := os.Stat(path)
+
 	return err == nil
 }

@@ -79,6 +79,7 @@ func Decode(r io.Reader) (x uint64, err error) {
 
 	// get number of continuation bytes and store bits from c0.
 	var l int
+
 	switch {
 	case c0 < t3:
 		// if c0 == 110xxxxx
@@ -113,19 +114,23 @@ func Decode(r io.Reader) (x uint64, err error) {
 	}
 
 	// store bits from continuation bytes.
-	for i := 0; i < l; i++ {
+	for range l {
 		x <<= 6
+
 		c, err := ioutilx.ReadByte(r)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return 0, io.ErrUnexpectedEOF
 			}
+
 			return 0, err
 		}
+
 		if c < tx || t2 <= c {
 			// if c != 10xxxxxx
 			return 0, errors.New("frame.decodeUTF8Int: expected continuation byte")
 		}
+
 		x |= uint64(c & maskx)
 	}
 
@@ -133,28 +138,59 @@ func Decode(r io.Reader) (x uint64, err error) {
 	switch l {
 	case 1:
 		if x <= rune1Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	case 2:
 		if x <= rune2Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	case 3:
 		if x <= rune3Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	case 4:
 		if x <= rune4Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	case 5:
 		if x <= rune5Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	case 6:
 		if x <= rune6Max {
-			return 0, fmt.Errorf("frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes", x, l+1, l)
+			return 0, fmt.Errorf(
+				"frame.decodeUTF8Int: larger number representation than necessary; x (%d) stored in %d bytes, could be stored in %d bytes",
+				x,
+				l+1,
+				l,
+			)
 		}
 	}
+
 	return x, nil
 }
