@@ -37,6 +37,25 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 		}
 	}
 
+	// FLAC spec: block size is 1..65535 samples. Validate before any
+	// uint16 conversion below, otherwise stream stats (blockSizeMin/Max,
+	// nsamples) get poisoned by truncation/wrap-around.
+	if nsamplesPerChannel < 1 || nsamplesPerChannel > math.MaxUint16 {
+		return fmt.Errorf(
+			"invalid block size %d; must be in range [1, %d]",
+			nsamplesPerChannel, math.MaxUint16,
+		)
+	}
+
+	// The frame header's BlockSize field must match the actual sample count;
+	// otherwise the encoded header would lie about how much data follows.
+	if int(f.BlockSize) != nsamplesPerChannel {
+		return fmt.Errorf(
+			"header BlockSize %d does not match subframe sample count %d",
+			f.BlockSize, nsamplesPerChannel,
+		)
+	}
+
 	if nchannels != f.Channels.Count() {
 		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
 	}

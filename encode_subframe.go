@@ -223,7 +223,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	if err := bw.WriteBits(
 		uint64(subframe.CoeffShift),
 		5,
-	); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
+	); err != nil { //nolint:gosec // CoeffShift is a 5-bit signed predictor coefficient shift per FLAC spec
 		return err
 	}
 

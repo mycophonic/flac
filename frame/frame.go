@@ -633,7 +633,15 @@ func (frame *Frame) parseBlockSize(br *bits.Reader, blockSize uint64) error {
 			return unexpected(err)
 		}
 
-		frame.BlockSize = uint16(x + 1) //nolint:gosec // value bounded by bit-field width just read from the stream
+		// FLAC block size is in [1, 65535]. The on-wire encoding stores
+		// (blocksize - 1), so x = 0xFFFF would mean blocksize = 65536,
+		// which is out of spec. Reject explicitly to avoid uint16 wrap
+		// to 0.
+		if x == 0xFFFF {
+			return errors.New("frame.Frame.parseHeader: invalid block size 65536 (out of FLAC spec range)")
+		}
+
+		frame.BlockSize = uint16(x + 1) //nolint:gosec // x validated to be < 0xFFFF, so x+1 fits in uint16
 	default:
 		//    1000-1111: 256 * 2^(n-8) samples.
 		frame.BlockSize = 256 * (1 << (n - 8))

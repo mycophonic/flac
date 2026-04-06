@@ -61,8 +61,24 @@ func encodeEmptyBlock(bw *bitio.Writer, typ meta.Type, last bool) error {
 
 // --- [ Metadata block header ] -----------------------------------------------
 
+// maxMetadataBlockLength is the largest value that fits in the FLAC metadata
+// block header's 24-bit length field (16 MiB - 1).
+const maxMetadataBlockLength = 0xFFFFFF
+
 // encodeBlockHeader encodes the metadata block header, writing to bw.
 func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
+	// FLAC spec: the metadata block header encodes Length in a 24-bit
+	// field, so the valid range is [0, 0xFFFFFF]. Reject out-of-range
+	// values explicitly; otherwise WriteBits would silently truncate to
+	// the low 24 bits and the encoded header would lie about how much
+	// body data follows.
+	if hdr.Length < 0 || hdr.Length > maxMetadataBlockLength {
+		return fmt.Errorf(
+			"metadata block length %d out of range [0, %d]",
+			hdr.Length, maxMetadataBlockLength,
+		)
+	}
+
 	// 1 bit: IsLast.
 	if err := bw.WriteBool(hdr.IsLast); err != nil {
 		return err
@@ -72,7 +88,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 		return err
 	}
 	// 24 bits: Length.
-	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil { //nolint:gosec // value is non-negative by construction
+	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil { //nolint:gosec // value validated above to fit in 24 bits
 		return err
 	}
 
