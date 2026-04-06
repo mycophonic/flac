@@ -105,6 +105,14 @@ func ParseInto(br *bits.Reader, samplesBuf []int32, subframes []*Subframe) (*Fra
 	return frame, err
 }
 
+// ParseReuse parses subframes using pre-allocated buffers on a frame whose
+// header has already been parsed by New. This allows the caller to inspect or
+// modify header fields (e.g. resolve BitsPerSample from StreamInfo) between
+// header parsing and subframe decoding.
+func (frame *Frame) ParseReuse(samplesBuf []int32, subframes []*Subframe) error {
+	return frame.parseInto(samplesBuf, subframes)
+}
+
 // Parse reads and parses the audio samples from each subframe of the frame. If
 // the samples are inter-channel decorrelated between the subframes, it
 // correlates them.

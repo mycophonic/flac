@@ -369,6 +369,12 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 		return nil, fmt.Errorf("flac.Stream.Next: bit depth mismatch; frame has %d bits, StreamInfo has %d", f.BitsPerSample, stream.Info.BitsPerSample)
 	}
 
+	// Resolve BitsPerSample=0 from StreamInfo so that callers who subsequently
+	// call f.Parse() get correct subframe decoding.
+	if f.BitsPerSample == 0 {
+		f.BitsPerSample = stream.Info.BitsPerSample
+	}
+
 	// Validate running sample count against StreamInfo.NSamples.
 	// See ParseNext() for detailed rationale.
 	stream.samplesDecoded += uint64(f.BlockSize)
@@ -382,7 +388,9 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 // ParseNext parses the entire next frame including audio samples. It returns
 // io.EOF to signal a graceful end of FLAC stream.
 func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
-	f, err = frame.ParseInto(stream.br, stream.samplesBuf, stream.subframeBuf)
+	// Parse header first so we can validate and resolve fields before
+	// subframe decoding begins.
+	f, err = frame.New(stream.br)
 	if err != nil {
 		return f, err
 	}
@@ -395,6 +403,16 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 	// See Next() for rationale on bit depth validation.
 	if f.BitsPerSample != 0 && f.BitsPerSample != stream.Info.BitsPerSample {
 		return nil, fmt.Errorf("flac.Stream.ParseNext: bit depth mismatch; frame has %d bits, StreamInfo has %d", f.BitsPerSample, stream.Info.BitsPerSample)
+	}
+
+	// Resolve BitsPerSample=0 from StreamInfo before subframe parsing.
+	if f.BitsPerSample == 0 {
+		f.BitsPerSample = stream.Info.BitsPerSample
+	}
+
+	// Now parse subframes with the resolved header.
+	if err = f.ParseReuse(stream.samplesBuf, stream.subframeBuf); err != nil {
+		return f, err
 	}
 
 	// Track running sample count and validate against StreamInfo.NSamples.
