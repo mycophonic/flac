@@ -2,7 +2,7 @@ package meta
 
 import (
 	"encoding/binary"
-	"io/ioutil"
+	"io"
 )
 
 // Application contains third party application specific data.
@@ -33,6 +33,6 @@ func (block *Block) parseApplication() error {
 	}
 
 	// (block length)-4 bytes: Data.
-	app.Data, err = ioutil.ReadAll(block.lr)
+	app.Data, err = io.ReadAll(block.lr)
 	return unexpected(err)
 }

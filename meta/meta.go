@@ -31,7 +31,6 @@ package meta
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 )
 
 // A Block contains the header and body of a metadata block.
@@ -126,7 +125,7 @@ func (block *Block) Skip() error {
 		_, err := sr.Seek(0, io.SeekEnd)
 		return err
 	}
-	_, err := io.Copy(ioutil.Discard, block.lr)
+	_, err := io.Copy(io.Discard, block.lr)
 	return err
 }
 

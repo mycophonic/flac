@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"slices"
 	"testing"
@@ -180,7 +179,7 @@ func TestEncodeRoundTrip(t *testing.T) {
 			}
 
 			// Compare source and destination FLAC streams.
-			want, err := ioutil.ReadFile(path)
+			want, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatalf("%q: unable to read file; %v", path, err)
 			}

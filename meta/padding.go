@@ -3,7 +3,6 @@ package meta
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 )
 
 // verifyPadding verifies the body of a Padding metadata block. It should only
@@ -12,7 +11,7 @@ import (
 // ref: https://www.xiph.org/flac/format.html#metadata_block_padding
 func (block *Block) verifyPadding() error {
 	zr := zeros{r: block.lr}
-	_, err := io.Copy(ioutil.Discard, zr)
+	_, err := io.Copy(io.Discard, zr)
 	return err
 }
 

@@ -3,7 +3,7 @@ package meta_test
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 
@@ -235,7 +235,7 @@ func TestParsePicture(t *testing.T) {
 	}
 	defer stream.Close()
 
-	want, err := ioutil.ReadFile("testdata/silence.jpg")
+	want, err := os.ReadFile("testdata/silence.jpg")
 	if err != nil {
 		t.Fatal(err)
 	}
