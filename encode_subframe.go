@@ -268,8 +268,29 @@ func encodeResiduals(bw *bitio.Writer, subframe *frame.Subframe, residuals []int
 // ref: https://www.xiph.org/flac/format.html#partitioned_rice
 // ref: https://www.xiph.org/flac/format.html#partitioned_rice2
 func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, residuals []int32) error {
-	// 4 bits: Partition order.
 	riceSubframe := subframe.RiceSubframe
+	partOrder := riceSubframe.PartOrder
+	nparts := 1 << partOrder
+
+	// Validate before writing anything to the bitstream. PartOrder is what
+	// the decoder uses to determine how many partitions to read, so the
+	// length of Partitions must match exactly.
+	if len(riceSubframe.Partitions) != nparts {
+		return fmt.Errorf(
+			"encodeRicePart: partition count mismatch; PartOrder=%d implies %d partitions, got %d",
+			partOrder, nparts, len(riceSubframe.Partitions),
+		)
+	}
+	// FLAC spec: block_size must be evenly divisible by 2^partition_order.
+	// Same constraint enforced on the decode side.
+	if subframe.NSamples%nparts != 0 {
+		return fmt.Errorf(
+			"encodeRicePart: block size %d not evenly divisible by 2^%d partitions",
+			subframe.NSamples, partOrder,
+		)
+	}
+
+	// 4 bits: Partition order.
 	if err := bw.WriteBits(uint64(riceSubframe.PartOrder), 4); err != nil {
 		return err
 	}
@@ -278,8 +299,6 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 	//
 	// ref: https://www.xiph.org/flac/format.html#rice_partition
 	// ref: https://www.xiph.org/flac/format.html#rice2_partition
-	partOrder := riceSubframe.PartOrder
-	nparts := 1 << partOrder
 	curResidualIndex := 0
 
 	for i := range riceSubframe.Partitions {
