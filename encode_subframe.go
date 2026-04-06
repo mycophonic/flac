@@ -270,6 +270,19 @@ func encodeResiduals(bw *bitio.Writer, subframe *frame.Subframe, residuals []int
 func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, residuals []int32) error {
 	riceSubframe := subframe.RiceSubframe
 	partOrder := riceSubframe.PartOrder
+
+	// FLAC spec: PartOrder is encoded in a 4-bit field, so the valid range
+	// is 0..15. Validate before computing 1 << partOrder, which would
+	// otherwise panic on negative values, wrap to 0 on values >= 64
+	// (causing a divide-by-zero in the % check below), or silently
+	// truncate to 4 bits on values 16..63 (corrupting the bitstream).
+	if partOrder < 0 || partOrder > 15 {
+		return fmt.Errorf(
+			"encodeRicePart: PartOrder %d out of range [0, 15]",
+			partOrder,
+		)
+	}
+
 	nparts := 1 << partOrder
 
 	// Validate before writing anything to the bitstream. PartOrder is what
