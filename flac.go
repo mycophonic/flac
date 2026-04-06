@@ -527,7 +527,9 @@ func (stream *Stream) searchFromStart(sampleNum uint64) (meta.SeekPoint, error) 
 		return points[i].SampleNum > sampleNum
 	}) - 1
 	if i < 0 {
-		i = 0
+		// Target precedes the first seek point; fall back to the start of
+		// audio data so the scan loop can find the correct frame.
+		return meta.SeekPoint{SampleNum: 0, Offset: 0}, nil
 	}
 	return points[i], nil
 }
