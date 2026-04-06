@@ -81,6 +81,7 @@ type Stream struct {
 func New(r io.Reader) (stream *Stream, err error) {
 	// Verify FLAC signature and parse the StreamInfo metadata block.
 	stream = &Stream{r: r}
+
 	block, err := stream.parseStreamInfo()
 	if err != nil {
 		return nil, err
@@ -89,9 +90,10 @@ func New(r io.Reader) (stream *Stream, err error) {
 	// Skip the remaining metadata blocks.
 	for !block.IsLast {
 		block, err = meta.New(r)
-		if err != nil && err != meta.ErrReservedType {
+		if err != nil && !errors.Is(err, meta.ErrReservedType) {
 			return stream, err
 		}
+
 		if err = block.Skip(); err != nil {
 			return stream, err
 		}
@@ -120,15 +122,16 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 	for !block.IsLast {
 		block, err = meta.Parse(stream.r)
 		if err != nil {
-			if err != meta.ErrReservedType {
+			if !errors.Is(err, meta.ErrReservedType) {
 				return stream, err
 			}
+
 			if err = block.Skip(); err != nil {
 				return stream, err
 			}
 		}
 
-		if block.Header.Type == meta.TypeSeekTable {
+		if block.Type == meta.TypeSeekTable {
 			stream.seekTable = block.Body.(*meta.SeekTable)
 		}
 	}
@@ -174,6 +177,7 @@ const (
 func (stream *Stream) parseStreamInfo() (block *meta.Block, err error) {
 	// Verify FLAC signature.
 	r := stream.r
+
 	var buf [4]byte
 	if _, err = io.ReadFull(r, buf[:]); err != nil {
 		return block, err
@@ -192,7 +196,11 @@ func (stream *Stream) parseStreamInfo() (block *meta.Block, err error) {
 	}
 
 	if !bytes.Equal(buf[:], flacSignature) {
-		return block, fmt.Errorf("flac.parseStreamInfo: invalid FLAC signature; expected %q, got %q", flacSignature, buf)
+		return block, fmt.Errorf(
+			"flac.parseStreamInfo: invalid FLAC signature; expected %q, got %q",
+			flacSignature,
+			buf,
+		)
 	}
 
 	// Parse StreamInfo metadata block.
@@ -200,11 +208,17 @@ func (stream *Stream) parseStreamInfo() (block *meta.Block, err error) {
 	if err != nil {
 		return block, err
 	}
+
 	si, ok := block.Body.(*meta.StreamInfo)
 	if !ok {
-		return block, fmt.Errorf("flac.parseStreamInfo: incorrect type of first metadata block; expected *meta.StreamInfo, got %T", block.Body)
+		return block, fmt.Errorf(
+			"flac.parseStreamInfo: incorrect type of first metadata block; expected *meta.StreamInfo, got %T",
+			block.Body,
+		)
 	}
+
 	stream.Info = si
+
 	return block, nil
 }
 
@@ -227,6 +241,7 @@ func (stream *Stream) skipID3v2() error {
 	size := int64(sizeBuf[0])<<21 | int64(sizeBuf[1])<<14 | int64(sizeBuf[2])<<7 | int64(sizeBuf[3])
 
 	_, err := io.CopyN(io.Discard, r, size)
+
 	return err
 }
 
@@ -238,6 +253,7 @@ func (stream *Stream) skipID3v2() error {
 func Parse(r io.Reader) (stream *Stream, err error) {
 	// Verify FLAC signature and parse the StreamInfo metadata block.
 	stream = &Stream{r: r}
+
 	block, err := stream.parseStreamInfo()
 	if err != nil {
 		return nil, err
@@ -247,7 +263,7 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 	for !block.IsLast {
 		block, err = meta.Parse(r)
 		if err != nil {
-			if err != meta.ErrReservedType {
+			if !errors.Is(err, meta.ErrReservedType) {
 				return stream, err
 			}
 			// Skip the body of unknown (reserved) metadata blocks, as stated by
@@ -258,6 +274,7 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 				return stream, err
 			}
 		}
+
 		stream.Blocks = append(stream.Blocks, block)
 	}
 
@@ -285,6 +302,7 @@ func Open(path string) (stream *Stream, err error) {
 	stream, err = New(f)
 	if err != nil {
 		_ = f.Close()
+
 		return nil, err
 	}
 
@@ -304,9 +322,11 @@ func ParseFile(path string) (stream *Stream, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	stream, err = Parse(f)
 	if err != nil {
 		_ = f.Close()
+
 		return nil, err
 	}
 
@@ -329,6 +349,7 @@ func (stream *Stream) initDecodeBuffers() {
 	nChannels := int(stream.Info.NChannels)
 	blockSize := int(stream.Info.BlockSizeMax)
 	stream.samplesBuf = make([]int32, nChannels*blockSize)
+
 	stream.subframeBuf = make([]*frame.Subframe, nChannels)
 	for i := range stream.subframeBuf {
 		stream.subframeBuf[i] = new(frame.Subframe)
@@ -357,7 +378,11 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 	//
 	// Return a clear error instead of letting the caller panic.
 	if got, want := f.Channels.Count(), int(stream.Info.NChannels); got != want {
-		return nil, fmt.Errorf("flac.Stream.Next: channel count mismatch; frame has %d channels, StreamInfo has %d", got, want)
+		return nil, fmt.Errorf(
+			"flac.Stream.Next: channel count mismatch; frame has %d channels, StreamInfo has %d",
+			got,
+			want,
+		)
 	}
 
 	// Each frame header independently specifies its own bit depth
@@ -368,7 +393,11 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 	// different resolution than the stream declares, which corrupts sample
 	// decoding and buffer sizing.
 	if f.BitsPerSample != 0 && f.BitsPerSample != stream.Info.BitsPerSample {
-		return nil, fmt.Errorf("flac.Stream.Next: bit depth mismatch; frame has %d bits, StreamInfo has %d", f.BitsPerSample, stream.Info.BitsPerSample)
+		return nil, fmt.Errorf(
+			"flac.Stream.Next: bit depth mismatch; frame has %d bits, StreamInfo has %d",
+			f.BitsPerSample,
+			stream.Info.BitsPerSample,
+		)
 	}
 
 	// Resolve BitsPerSample=0 from StreamInfo so that callers who subsequently
@@ -399,12 +428,20 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 
 	// See Next() for rationale on channel count validation.
 	if got, want := f.Channels.Count(), int(stream.Info.NChannels); got != want {
-		return nil, fmt.Errorf("flac.Stream.ParseNext: channel count mismatch; frame has %d channels, StreamInfo has %d", got, want)
+		return nil, fmt.Errorf(
+			"flac.Stream.ParseNext: channel count mismatch; frame has %d channels, StreamInfo has %d",
+			got,
+			want,
+		)
 	}
 
 	// See Next() for rationale on bit depth validation.
 	if f.BitsPerSample != 0 && f.BitsPerSample != stream.Info.BitsPerSample {
-		return nil, fmt.Errorf("flac.Stream.ParseNext: bit depth mismatch; frame has %d bits, StreamInfo has %d", f.BitsPerSample, stream.Info.BitsPerSample)
+		return nil, fmt.Errorf(
+			"flac.Stream.ParseNext: bit depth mismatch; frame has %d bits, StreamInfo has %d",
+			f.BitsPerSample,
+			stream.Info.BitsPerSample,
+		)
 	}
 
 	// Resolve BitsPerSample=0 from StreamInfo before subframe parsing.
@@ -495,10 +532,12 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
+
 		f, err := stream.ParseNext()
 		if err != nil {
 			return 0, err
 		}
+
 		if f.SampleNumber()+uint64(f.BlockSize) > sampleNum {
 			// Restore seek offset to the start of the frame containing the
 			// specified sample number.
@@ -510,6 +549,7 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 			stream.samplesDecoded = f.SampleNumber()
 
 			_, err := stream.br.Seek(offset, io.SeekStart)
+
 			return f.SampleNumber(), err
 		}
 	}
@@ -533,6 +573,7 @@ func (stream *Stream) searchFromStart(sampleNum uint64) (meta.SeekPoint, error) 
 		// audio data so the scan loop can find the correct frame.
 		return meta.SeekPoint{SampleNum: 0, Offset: 0}, nil
 	}
+
 	return points[i], nil
 }
 
@@ -558,21 +599,27 @@ func (stream *Stream) makeSeekTable() (err error) {
 	savedSamples := stream.samplesDecoded
 	stream.samplesDecoded = 0
 
-	var sampleNum uint64
-	var points []meta.SeekPoint
+	var (
+		sampleNum uint64
+		points    []meta.SeekPoint
+	)
+
 	for {
 		// Record seek offset to start of frame.
 		off, err := stream.br.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return err
 		}
+
 		f, err := stream.ParseNext()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			return err
 		}
+
 		points = append(points, meta.SeekPoint{
 			SampleNum: sampleNum,
 			Offset:    uint64(off - stream.dataStart),
@@ -587,5 +634,6 @@ func (stream *Stream) makeSeekTable() (err error) {
 
 	// Restore original position.
 	_, err = stream.br.Seek(pos, io.SeekStart)
+
 	return err
 }

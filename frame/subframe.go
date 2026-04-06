@@ -14,6 +14,7 @@ import (
 type Subframe struct {
 	// Subframe header.
 	SubHeader
+
 	// Unencoded audio samples. Samples is initially nil, and gets populated by a
 	// call to Frame.Parse.
 	//
@@ -57,7 +58,9 @@ func (frame *Frame) parseSubframeInto(br *bits.Reader, bps uint, samples []int32
 	// Decode subframe audio samples.
 	subframe.NSamples = int(frame.BlockSize)
 	subframe.Samples = samples[:subframe.NSamples]
+
 	var err error
+
 	switch subframe.Pred {
 	case PredConstant:
 		err = subframe.decodeConstant(br, bps)
@@ -73,6 +76,7 @@ func (frame *Frame) parseSubframeInto(br *bits.Reader, bps uint, samples []int32
 	for i, sample := range subframe.Samples {
 		subframe.Samples[i] = sample << subframe.Wasted
 	}
+
 	return err
 }
 
@@ -127,6 +131,7 @@ func (subframe *Subframe) parseHeader(br *bits.Reader) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x != 0 {
 		return errors.New("frame.Subframe.parseHeader: non-zero padding")
 	}
@@ -169,6 +174,7 @@ func (subframe *Subframe) parseHeader(br *bits.Reader) error {
 		if order > 4 {
 			return fmt.Errorf("frame.Subframe.parseHeader: reserved prediction method bit pattern (%06b)", x)
 		}
+
 		subframe.Pred = PredFixed
 		subframe.Order = order
 	case x < 32:
@@ -185,6 +191,7 @@ func (subframe *Subframe) parseHeader(br *bits.Reader) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x != 0 {
 		// k wasted bits-per-sample in source subblock, k-1 follows, unary coded;
 		// e.g. k=3 => 001 follows, k=7 => 0000001 follows.
@@ -192,6 +199,7 @@ func (subframe *Subframe) parseHeader(br *bits.Reader) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		subframe.Wasted = uint(x) + 1
 	}
 
@@ -242,6 +250,7 @@ func signExtend(x uint64, n uint) int32 {
 		// Sign extend x.
 		return int32(x | ^uint64(0)<<n)
 	}
+
 	return int32(x)
 }
 
@@ -281,8 +290,10 @@ func (subframe *Subframe) decodeVerbatim(br *bits.Reader, bps uint) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		subframe.Samples[i] = signExtend(x, bps)
 	}
+
 	return nil
 }
 
@@ -295,6 +306,7 @@ func (subframe *Subframe) decodeVerbatimAligned(br *bits.Reader, bps uint) error
 	if cap(subframe.verbatimBuf) < needed {
 		subframe.verbatimBuf = make([]byte, needed)
 	}
+
 	buf := subframe.verbatimBuf[:needed]
 	if err := br.ReadAligned(buf); err != nil {
 		return unexpected(err)
@@ -329,10 +341,12 @@ func (subframe *Subframe) decodeVerbatimAligned(br *bits.Reader, bps uint) error
 		// Generic aligned path for other multiples of 8.
 		for i := range subframe.NSamples {
 			off := i * bytesPerSample
+
 			var x uint64
 			for j := range bytesPerSample {
 				x = x<<8 | uint64(buf[off+j])
 			}
+
 			subframe.Samples[i] = signExtend(x, bps)
 		}
 	}
@@ -369,6 +383,7 @@ func (subframe *Subframe) decodeFixed(br *bits.Reader, bps uint) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		subframe.Samples[i] = signExtend(x, bps)
 	}
 
@@ -381,6 +396,7 @@ func (subframe *Subframe) decodeFixed(br *bits.Reader, bps uint) error {
 	// predefined coefficients of a given order. Correct signal errors using the
 	// decoded residuals.
 	const shift = 0
+
 	return subframe.decodeLPC(FixedCoeffs[subframe.Order], shift)
 }
 
@@ -396,6 +412,7 @@ func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		subframe.Samples[i] = signExtend(x, bps)
 	}
 
@@ -404,9 +421,11 @@ func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x == 0xF {
 		return errors.New("frame.Subframe.decodeFIR: invalid coefficient precision bit pattern (1111)")
 	}
+
 	prec := uint(x) + 1
 	subframe.CoeffPrec = prec
 
@@ -415,6 +434,7 @@ func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	shift := signExtend(x, 5)
 	subframe.CoeffShift = shift
 
@@ -426,8 +446,10 @@ func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		coeffs[i] = signExtend(x, prec)
 	}
+
 	subframe.Coeffs = coeffs
 
 	// Decode subframe residuals.
@@ -462,6 +484,7 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	residualCodingMethod := ResidualCodingMethod(x)
 	subframe.ResidualCodingMethod = residualCodingMethod
 	// The 2 bits are used to specify the residual coding method as follows:
@@ -475,7 +498,10 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 	case 0x1:
 		return subframe.decodeRicePart(br, 5)
 	default:
-		return fmt.Errorf("frame.Subframe.decodeResiduals: reserved residual coding method bit pattern (%02b)", uint8(residualCodingMethod))
+		return fmt.Errorf(
+			"frame.Subframe.decodeResiduals: reserved residual coding method bit pattern (%02b)",
+			uint8(residualCodingMethod),
+		)
 	}
 }
 
@@ -490,6 +516,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 	if err != nil {
 		return unexpected(err)
 	}
+
 	partOrder := int(x)
 
 	// FLAC spec: block_size must be evenly divisible by 2^partition_order, and
@@ -498,10 +525,20 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 	// produces negative sample counts per partition.
 	nparts := 1 << partOrder
 	if subframe.NSamples%nparts != 0 {
-		return fmt.Errorf("frame.Subframe.decodeRicePart: block size %d not evenly divisible by 2^%d partitions", subframe.NSamples, partOrder)
+		return fmt.Errorf(
+			"frame.Subframe.decodeRicePart: block size %d not evenly divisible by 2^%d partitions",
+			subframe.NSamples,
+			partOrder,
+		)
 	}
+
 	if subframe.NSamples/nparts < subframe.Order {
-		return fmt.Errorf("frame.Subframe.decodeRicePart: partition order %d too large for block size %d with predictor order %d", partOrder, subframe.NSamples, subframe.Order)
+		return fmt.Errorf(
+			"frame.Subframe.decodeRicePart: partition order %d too large for block size %d with predictor order %d",
+			partOrder,
+			subframe.NSamples,
+			subframe.Order,
+		)
 	}
 
 	riceSubframe := &RiceSubframe{
@@ -517,12 +554,14 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 	if cap(subframe.partitionsBuf) < nparts {
 		subframe.partitionsBuf = make([]RicePartition, nparts)
 	}
+
 	partitions := subframe.partitionsBuf[:nparts]
 	// Zero the partition structs for reuse.
 	clear(partitions)
 	riceSubframe.Partitions = partitions
 	// Write cursor into subframe.Samples, starting after warm-up samples.
 	sIdx := subframe.Order
+
 	for i := range nparts {
 		partition := &partitions[i]
 		// (4 or 5) bits: Rice parameter.
@@ -530,6 +569,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 		if err != nil {
 			return unexpected(err)
 		}
+
 		param := uint(x)
 		partition.Param = param
 
@@ -550,7 +590,9 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 			if err != nil {
 				return unexpected(err)
 			}
+
 			n := uint(x)
+
 			partition.EscapedBitsPerSample = n
 			for range nsamples {
 				sample, err := br.Read(n)
@@ -568,6 +610,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 				subframe.Samples[sIdx] = int32(bits.IntN(sample, n))
 				sIdx++
 			}
+
 			continue
 		}
 
@@ -577,6 +620,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 			if err != nil {
 				return unexpected(err)
 			}
+
 			subframe.Samples[sIdx] = residual
 			sIdx++
 		}
@@ -590,20 +634,33 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 // and the signal errors of the prediction as specified by the residuals.
 func (subframe *Subframe) decodeLPC(coeffs []int32, shift int32) error {
 	if len(coeffs) != subframe.Order {
-		return fmt.Errorf("frame.Subframe.decodeLPC: prediction order (%d) differs from number of coefficients (%d)", subframe.Order, len(coeffs))
+		return fmt.Errorf(
+			"frame.Subframe.decodeLPC: prediction order (%d) differs from number of coefficients (%d)",
+			subframe.Order,
+			len(coeffs),
+		)
 	}
+
 	if shift < 0 {
-		return fmt.Errorf("frame.Subframe.decodeLPC: invalid negative shift")
+		return errors.New("frame.Subframe.decodeLPC: invalid negative shift")
 	}
+
 	if subframe.NSamples != len(subframe.Samples) {
-		return fmt.Errorf("frame.Subframe.decodeLPC: subframe sample count mismatch; expected %d, got %d", subframe.NSamples, len(subframe.Samples))
+		return fmt.Errorf(
+			"frame.Subframe.decodeLPC: subframe sample count mismatch; expected %d, got %d",
+			subframe.NSamples,
+			len(subframe.Samples),
+		)
 	}
+
 	for i := subframe.Order; i < subframe.NSamples; i++ {
 		var sample int64
 		for j, c := range coeffs {
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
+
 		subframe.Samples[i] += int32(sample >> uint(shift))
 	}
+
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/icza/bitio"
+
 	"github.com/mycophonic/flac/meta"
 )
 
@@ -13,6 +14,7 @@ import (
 type Encoder struct {
 	// FLAC stream of encoder.
 	*Stream
+
 	// Underlying io.Writer or io.WriteCloser to the output stream.
 	w io.Writer
 	// Minimum and maximum block size (in samples) of frames written by encoder.
@@ -56,6 +58,7 @@ func NewEncoder(w io.Writer, info *meta.StreamInfo, blocks ...*meta.Block) (*Enc
 	if err := encodeStreamInfo(bw, info, len(blocks) == 0); err != nil {
 		return nil, err
 	}
+
 	for i, block := range blocks {
 		if err := encodeBlock(bw, block, i == len(blocks)-1); err != nil {
 			return nil, err
@@ -91,21 +94,23 @@ func (enc *Encoder) Close() error {
 		enc.Info.NSamples = enc.nsamples
 		// Update MD5 checksum of the unencoded audio samples.
 		sum := enc.md5sum.Sum(nil)
-		for i := range sum {
-			enc.Info.MD5sum[i] = sum[i]
-		}
+		copy(enc.Info.MD5sum[:], sum)
+
 		bw := bitio.NewWriter(ws)
 		// Write updated StreamInfo metadata block to output stream.
 		if err := encodeStreamInfo(bw, enc.Info, len(enc.Blocks) == 0); err != nil {
 			return err
 		}
+
 		if _, err := bw.Align(); err != nil {
 			return err
 		}
 	}
+
 	if closer, ok := enc.w.(io.Closer); ok {
 		return closer.Close()
 	}
+
 	return nil
 }
 

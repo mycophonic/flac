@@ -13,6 +13,7 @@ func Encode(w io.Writer, x uint64) error {
 		if err := ioutilx.WriteByte(w, byte(x)); err != nil {
 			return err
 		}
+
 		return nil
 	}
 
@@ -23,6 +24,7 @@ func Encode(w io.Writer, x uint64) error {
 		// bits of c0.
 		bits uint64
 	)
+
 	switch {
 	case x <= rune2Max:
 		// if c0 == 110xxxxx
@@ -67,5 +69,6 @@ func Encode(w io.Writer, x uint64) error {
 			return err
 		}
 	}
+
 	return nil
 }

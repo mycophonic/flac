@@ -45,6 +45,7 @@ import (
 type Frame struct {
 	// Audio frame header.
 	Header
+
 	// One subframe per channel, containing encoded audio samples.
 	Subframes []*Subframe
 	// A bit reader with internal 4KB buffer and inline CRC computation.
@@ -70,6 +71,7 @@ func New(br *bits.Reader) (frame *Frame, err error) {
 	// Parse frame header.
 	frame = &Frame{br: br}
 	err = frame.parseHeader()
+
 	return frame, err
 }
 
@@ -88,6 +90,7 @@ func Parse(br *bits.Reader) (frame *Frame, err error) {
 
 	// Parse subframes.
 	err = frame.Parse()
+
 	return frame, err
 }
 
@@ -101,7 +104,9 @@ func ParseInto(br *bits.Reader, samplesBuf []int32, subframes []*Subframe) (*Fra
 	if err != nil {
 		return frame, err
 	}
+
 	err = frame.parseInto(samplesBuf, subframes)
+
 	return frame, err
 }
 
@@ -123,10 +128,12 @@ func (frame *Frame) Parse() error {
 	nChannels := frame.Channels.Count()
 	blockSize := int(frame.BlockSize)
 	frame.samplesBuf = make([]int32, nChannels*blockSize)
+
 	frame.Subframes = make([]*Subframe, nChannels)
 	for i := range frame.Subframes {
 		frame.Subframes[i] = new(Subframe)
 	}
+
 	return frame.parseSubframes()
 }
 
@@ -135,13 +142,21 @@ func (frame *Frame) Parse() error {
 func (frame *Frame) parseInto(samplesBuf []int32, subframes []*Subframe) error {
 	nChannels := frame.Channels.Count()
 	blockSize := int(frame.BlockSize)
+
 	required := nChannels * blockSize
 	if required > cap(samplesBuf) || nChannels > len(subframes) {
-		return fmt.Errorf("frame.Frame.parseInto: frame requires %d channels × %d block size, but buffers have capacity %d samples and %d subframes",
-			nChannels, blockSize, cap(samplesBuf), len(subframes))
+		return fmt.Errorf(
+			"frame.Frame.parseInto: frame requires %d channels × %d block size, but buffers have capacity %d samples and %d subframes",
+			nChannels,
+			blockSize,
+			cap(samplesBuf),
+			len(subframes),
+		)
 	}
+
 	frame.samplesBuf = samplesBuf[:required]
 	frame.Subframes = subframes[:nChannels]
+
 	return frame.parseSubframes()
 }
 
@@ -150,6 +165,7 @@ func (frame *Frame) parseInto(samplesBuf []int32, subframes []*Subframe) error {
 // Subframes slice and samplesBuf must already be set up before calling.
 func (frame *Frame) parseSubframes() error {
 	nChannels := frame.Channels.Count()
+
 	blockSize := int(frame.BlockSize)
 	for channel := range nChannels {
 		// The side channel requires an extra bit per sample when using
@@ -187,6 +203,7 @@ func (frame *Frame) parseSubframes() error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		if padding != 0 {
 			return fmt.Errorf("frame.Frame.Parse: non-zero padding bits (%d)", padding)
 		}
@@ -197,10 +214,12 @@ func (frame *Frame) parseSubframes() error {
 	// included in the CRC-16 computation.
 	got := frame.br.CRC16()
 	frame.br.DisableCRC16()
+
 	crc16Val, err := frame.br.Read(16)
 	if err != nil {
 		return unexpected(err)
 	}
+
 	want := uint16(crc16Val)
 	if got != want {
 		return fmt.Errorf("frame.Frame.Parse: CRC-16 checksum mismatch; expected 0x%04X, got 0x%04X", want, got)
@@ -217,15 +236,18 @@ func (frame *Frame) parseSubframes() error {
 func (frame *Frame) Hash(md5sum hash.Hash) {
 	// Write decoded samples to a running MD5 hash.
 	bps := frame.BitsPerSample
+
 	var buf [4]byte
+
 	if len(frame.Subframes) == 0 {
 		return
 	}
 	// Use the length of the first subframe's samples as they should all be the same length
 	nsamples := len(frame.Subframes[0].Samples)
-	for i := 0; i < nsamples; i++ {
+	for i := range nsamples {
 		for _, subframe := range frame.Subframes {
 			sample := subframe.Samples[i]
+
 			switch {
 			case 1 <= bps && bps <= 8:
 				buf[0] = uint8(sample)
@@ -302,7 +324,9 @@ func (frame *Frame) parseHeader() error {
 		// a graceful end of a FLAC stream.
 		return err
 	}
-	if x == 0 {
+
+	switch x {
+	case 0:
 		// All zeros: undeclared zero padding before the first audio frame
 		// (e.g. HDtracks FLAC files with 16 MB of zeros after metadata).
 		// Scan forward to the real sync code. On return, the reserved and
@@ -310,12 +334,13 @@ func (frame *Frame) parseHeader() error {
 		if err := frame.scanToSync(); err != nil {
 			return err
 		}
-	} else if x == 0x3FFE {
+	case 0x3FFE:
 		// 1 bit: reserved.
 		x, err = br.Read(1)
 		if err != nil {
 			return unexpected(err)
 		}
+
 		if x != 0 {
 			return errors.New("frame.Frame.parseHeader: non-zero reserved value")
 		}
@@ -325,10 +350,11 @@ func (frame *Frame) parseHeader() error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		if x == 0 {
 			frame.HasFixedBlockSize = true
 		}
-	} else {
+	default:
 		return ErrInvalidSync
 	}
 
@@ -361,6 +387,7 @@ func (frame *Frame) parseHeader() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x != 0 {
 		return errors.New("frame.Frame.parseHeader: non-zero reserved value")
 	}
@@ -391,11 +418,14 @@ func (frame *Frame) parseHeader() error {
 	// Disable CRC-8 before reading the checksum byte so it is not included
 	// in the CRC-8 computation. The byte still flows through CRC-16.
 	br.DisableCRC8()
+
 	crc8Val, err := br.Read(8)
 	if err != nil {
 		return unexpected(err)
 	}
+
 	want := uint8(crc8Val)
+
 	got := br.CRC8()
 	if want != got {
 		return fmt.Errorf("frame.Frame.parseHeader: CRC-8 checksum mismatch; expected 0x%02X, got 0x%02X", want, got)
@@ -435,10 +465,10 @@ func (frame *Frame) scanToSync() error {
 	// Scan byte-by-byte through zeros for the first sync byte (0xFF).
 	// Only zero bytes are tolerated; any non-zero byte that is not 0xFF
 	// is treated as corruption.
-	for skipped := 0; skipped < maxSyncScan; skipped++ {
+	for range maxSyncScan {
 		b, err := br.Read(8)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return io.ErrUnexpectedEOF
 			}
 
@@ -474,6 +504,7 @@ func (frame *Frame) scanToSync() error {
 		// Reset CRC checksums to start from this frame and seed with the
 		// two sync bytes so the header CRC covers the complete frame header.
 		syncBytes := [2]byte{0xFF, byte(next)}
+
 		br.EnableCRC16()
 		br.EnableCRC8()
 		br.FeedCRC(syncBytes[:])
@@ -526,6 +557,7 @@ func (frame *Frame) parseBitsPerSample(br *bits.Reader) error {
 		// 011: reserved.
 		return fmt.Errorf("frame.Frame.parseHeader: reserved sample size bit pattern (%03b)", x)
 	}
+
 	return nil
 }
 
@@ -553,10 +585,13 @@ func (frame *Frame) parseChannels(br *bits.Reader) error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	if x >= 0xB {
 		return fmt.Errorf("frame.Frame.parseHeader: reserved channels bit pattern (%04b)", x)
 	}
+
 	frame.Channels = Channels(x)
+
 	return nil
 }
 
@@ -586,6 +621,7 @@ func (frame *Frame) parseBlockSize(br *bits.Reader, blockSize uint64) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		frame.BlockSize = uint16(x + 1)
 	case n == 0x7:
 		// 0111: get 16 bit (block size)-1 from the end of the header.
@@ -593,11 +629,13 @@ func (frame *Frame) parseBlockSize(br *bits.Reader, blockSize uint64) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		frame.BlockSize = uint16(x + 1)
 	default:
 		//    1000-1111: 256 * 2^(n-8) samples.
 		frame.BlockSize = 256 * (1 << (n - 8))
 	}
+
 	return nil
 }
 
@@ -662,6 +700,7 @@ func (frame *Frame) parseSampleRate(br *bits.Reader, sampleRate uint64) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		frame.SampleRate = uint32(x * 1000)
 	case 0xD:
 		// 1101: get 16 bit sample rate (in Hz) from the end of the header.
@@ -669,6 +708,7 @@ func (frame *Frame) parseSampleRate(br *bits.Reader, sampleRate uint64) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		frame.SampleRate = uint32(x)
 	case 0xE:
 		// 1110: get 16 bit sample rate (in daHz) from the end of the header.
@@ -676,11 +716,13 @@ func (frame *Frame) parseSampleRate(br *bits.Reader, sampleRate uint64) error {
 		if err != nil {
 			return unexpected(err)
 		}
+
 		frame.SampleRate = uint32(x * 10)
 	default:
 		// 1111: invalid.
 		return errors.New("frame.Frame.parseHeader: invalid sample rate bit pattern (1111)")
 	}
+
 	return nil
 }
 
@@ -750,6 +792,7 @@ func (frame *Frame) Correlate() {
 	case ChannelsLeftSide:
 		// 2 channels: left, side; using inter-channel decorrelation.
 		left := frame.Subframes[0].Samples
+
 		side := frame.Subframes[1].Samples
 		for i := range side {
 			// right = left - side
@@ -758,6 +801,7 @@ func (frame *Frame) Correlate() {
 	case ChannelsSideRight:
 		// 2 channels: side, right; using inter-channel decorrelation.
 		side := frame.Subframes[0].Samples
+
 		right := frame.Subframes[1].Samples
 		for i := range side {
 			// left = right + side
@@ -766,6 +810,7 @@ func (frame *Frame) Correlate() {
 	case ChannelsMidSide:
 		// 2 channels: mid, side; using inter-channel decorrelation.
 		mid := frame.Subframes[0].Samples
+
 		side := frame.Subframes[1].Samples
 		for i := range side {
 			// left = (2*mid + side)/2
@@ -801,6 +846,7 @@ func (frame *Frame) Decorrelate() {
 		// 2 channels: left, side; using inter-channel decorrelation.
 		left := frame.Subframes[0].Samples  // already left; no change after inter-channel decorrelation.
 		right := frame.Subframes[1].Samples // set to side after inter-channel decorrelation.
+
 		for i := range left {
 			l := left[i]
 			r := right[i]
@@ -813,6 +859,7 @@ func (frame *Frame) Decorrelate() {
 		// 2 channels: side, right; using inter-channel decorrelation.
 		left := frame.Subframes[0].Samples  // set to side after inter-channel decorrelation.
 		right := frame.Subframes[1].Samples // already right; no change after inter-channel decorrelation.
+
 		for i := range left {
 			l := left[i]
 			r := right[i]
@@ -825,13 +872,16 @@ func (frame *Frame) Decorrelate() {
 		// 2 channels: mid, side; using inter-channel decorrelation.
 		left := frame.Subframes[0].Samples  // set to mid after inter-channel decorrelation.
 		right := frame.Subframes[1].Samples // set to side after inter-channel decorrelation.
+
 		for i := range left {
 			// inter-channel decorrelation:
 			//	mid = (left + right)/2
 			//	side = left - right
 			l := left[i]
 			r := right[i]
-			mid := int32((int64(l) + int64(r)) >> 1) // NOTE: using `(left + right) >> 1`, not the same as `(left + right) / 2`.
+			mid := int32(
+				(int64(l) + int64(r)) >> 1,
+			) // NOTE: using `(left + right) >> 1`, not the same as `(left + right) / 2`.
 			side := l - r
 			left[i] = mid
 			right[i] = side
@@ -844,14 +894,16 @@ func (frame *Frame) SampleNumber() uint64 {
 	if frame.HasFixedBlockSize {
 		return frame.Num * uint64(frame.BlockSize)
 	}
+
 	return frame.Num
 }
 
 // unexpected returns io.ErrUnexpectedEOF if err is io.EOF, and returns err
 // otherwise.
 func unexpected(err error) error {
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return io.ErrUnexpectedEOF
 	}
+
 	return err
 }

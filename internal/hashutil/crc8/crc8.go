@@ -30,6 +30,7 @@ func MakeTable(poly uint8) (table *Table) {
 	case ATM:
 		return ATMTable
 	}
+
 	return makeTable(poly)
 }
 
@@ -38,15 +39,17 @@ func makeTable(poly uint8) (table *Table) {
 	table = new(Table)
 	for i := range table {
 		crc := uint8(i)
-		for j := 0; j < 8; j++ {
+		for range 8 {
 			if crc&0x80 != 0 {
 				crc = crc<<1 ^ poly
 			} else {
 				crc <<= 1
 			}
 		}
+
 		table[i] = crc
 	}
+
 	return table
 }
 
@@ -85,11 +88,13 @@ func Update(crc uint8, table *Table, p []byte) uint8 {
 	for _, v := range p {
 		crc = table[crc^v]
 	}
+
 	return crc
 }
 
 func (d *digest) Write(p []byte) (n int, err error) {
 	d.crc = Update(d.crc, d.table, p)
+
 	return len(p), nil
 }
 

@@ -39,6 +39,7 @@ import (
 type Block struct {
 	// Metadata block header.
 	Header
+
 	// Metadata block body of type *StreamInfo, *Application, ... etc. Body is
 	// initially nil, and gets populated by a call to Block.Parse.
 	Body any
@@ -56,6 +57,7 @@ func New(r io.Reader) (block *Block, err error) {
 	if err = block.parseHeader(r); err != nil {
 		return block, err
 	}
+
 	block.lr = io.LimitReader(r, block.Length)
 
 	// Validate block type after the LimitReader is set up, so callers can
@@ -68,6 +70,7 @@ func New(r io.Reader) (block *Block, err error) {
 	if block.Type == 127 {
 		return block, ErrInvalidType
 	}
+
 	if block.Type >= 7 {
 		return block, ErrReservedType
 	}
@@ -82,9 +85,11 @@ func Parse(r io.Reader) (block *Block, err error) {
 	if err != nil {
 		return block, err
 	}
+
 	if err = block.Parse(); err != nil {
 		return block, err
 	}
+
 	return block, nil
 }
 
@@ -113,9 +118,11 @@ func (block *Block) Parse() error {
 	case TypePicture:
 		return block.parsePicture()
 	}
+
 	if block.Type >= 7 && block.Type <= 126 {
 		return ErrReservedType
 	}
+
 	return ErrInvalidType
 }
 
@@ -123,9 +130,12 @@ func (block *Block) Parse() error {
 func (block *Block) Skip() error {
 	if sr, ok := block.lr.(io.Seeker); ok {
 		_, err := sr.Seek(0, io.SeekEnd)
+
 		return err
 	}
+
 	_, err := io.Copy(io.Discard, block.lr)
+
 	return err
 }
 
@@ -206,8 +216,9 @@ func (t Type) String() string {
 // unexpected returns io.ErrUnexpectedEOF if err is io.EOF, and returns err
 // otherwise.
 func unexpected(err error) error {
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return io.ErrUnexpectedEOF
 	}
+
 	return err
 }

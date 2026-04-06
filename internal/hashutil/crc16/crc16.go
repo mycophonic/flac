@@ -30,6 +30,7 @@ func MakeTable(poly uint16) (table *Table) {
 	case IBM:
 		return IBMTable
 	}
+
 	return makeTable(poly)
 }
 
@@ -38,15 +39,17 @@ func makeTable(poly uint16) (table *Table) {
 	table = new(Table)
 	for i := range table {
 		crc := uint16(i << 8)
-		for j := 0; j < 8; j++ {
+		for range 8 {
 			if crc&0x8000 != 0 {
 				crc = crc<<1 ^ poly
 			} else {
 				crc <<= 1
 			}
 		}
+
 		table[i] = crc
 	}
+
 	return table
 }
 
@@ -85,11 +88,13 @@ func Update(crc uint16, table *Table, p []byte) uint16 {
 	for _, v := range p {
 		crc = crc<<8 ^ table[crc>>8^uint16(v)]
 	}
+
 	return crc
 }
 
 func (d *digest) Write(p []byte) (n int, err error) {
 	d.crc = Update(d.crc, d.table, p)
+
 	return len(p), nil
 }
 
@@ -100,6 +105,7 @@ func (d *digest) Sum16() uint16 {
 
 func (d *digest) Sum(in []byte) []byte {
 	s := d.Sum16()
+
 	return append(in, byte(s>>8), byte(s))
 }
 

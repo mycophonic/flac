@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/icza/bitio"
+
 	"github.com/mycophonic/flac/internal/ioutilx"
 	"github.com/mycophonic/flac/meta"
 )
@@ -17,9 +18,11 @@ func encodeBlock(bw *bitio.Writer, block *meta.Block, last bool) error {
 	if block.Type == meta.TypePadding {
 		return encodePadding(bw, block.Length, last)
 	}
+
 	if block.Length == 0 {
 		return encodeEmptyBlock(bw, block.Type, last)
 	}
+
 	switch body := block.Body.(type) {
 	case *meta.StreamInfo:
 		return encodeStreamInfo(bw, body, last)
@@ -52,6 +55,7 @@ func encodeEmptyBlock(bw *bitio.Writer, typ meta.Type, last bool) error {
 	if err := encodeBlockHeader(bw, hdr); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -71,6 +75,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -80,6 +85,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 func encodeStreamInfo(bw *bitio.Writer, info *meta.StreamInfo, last bool) error {
 	// Store metadata block header.
 	const nbits = 16 + 16 + 24 + 24 + 20 + 3 + 5 + 36 + 8*16
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypeStreamInfo,
@@ -126,6 +132,7 @@ func encodeStreamInfo(bw *bitio.Writer, info *meta.StreamInfo, last bool) error 
 	if _, err := bw.Write(info.MD5sum[:]); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -146,6 +153,7 @@ func encodePadding(bw *bitio.Writer, length int64, last bool) error {
 	if _, err := io.CopyN(bw, ioutilx.Zero, length); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -155,6 +163,7 @@ func encodePadding(bw *bitio.Writer, length int64, last bool) error {
 func encodeApplication(bw *bitio.Writer, app *meta.Application, last bool) error {
 	// Store metadata block header.
 	nbits := int64(32 + 8*len(app.Data))
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypeApplication,
@@ -173,6 +182,7 @@ func encodeApplication(bw *bitio.Writer, app *meta.Application, last bool) error
 	if _, err := bw.Write(app.Data); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -182,6 +192,7 @@ func encodeApplication(bw *bitio.Writer, app *meta.Application, last bool) error
 func encodeSeekTable(bw *bitio.Writer, table *meta.SeekTable, last bool) error {
 	// Store metadata block header.
 	nbits := int64((64 + 64 + 16) * len(table.Points))
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypeSeekTable,
@@ -197,6 +208,7 @@ func encodeSeekTable(bw *bitio.Writer, table *meta.SeekTable, last bool) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -209,6 +221,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	for _, tag := range comment.Tags {
 		nbits += int64(32 + 8*(len(tag[0])+1+len(tag[1])))
 	}
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypeVorbisComment,
@@ -234,10 +247,11 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Tags))); err != nil {
 		return err
 	}
+
 	for _, tag := range comment.Tags {
 		// Store tag, which has the following format:
 		//    NAME=VALUE
-		buf := []byte(fmt.Sprintf("%s=%s", tag[0], tag[1]))
+		buf := fmt.Appendf(nil, "%s=%s", tag[0], tag[1])
 		// 32 bits: vector length
 		if err := binary.Write(bw, binary.LittleEndian, uint32(len(buf))); err != nil {
 			return err
@@ -247,6 +261,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -262,6 +277,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 			nbits += 64 + 8 + 8*3
 		}
 	}
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypeCueSheet,
@@ -276,6 +292,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 	// 128 bytes: MCN.
 	var mcn [128]byte
 	copy(mcn[:], cs.MCN)
+
 	if _, err := bw.Write(mcn[:]); err != nil {
 		return err
 	}
@@ -291,6 +308,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 	if err := bw.WriteBits(0, 7); err != nil {
 		return err
 	}
+
 	if _, err := io.CopyN(bw, ioutilx.Zero, 258); err != nil {
 		return err
 	}
@@ -299,6 +317,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 	if err := bw.WriteBits(uint64(len(cs.Tracks)), 8); err != nil {
 		return err
 	}
+
 	for _, track := range cs.Tracks {
 		// 64 bits: Offset.
 		if err := bw.WriteBits(track.Offset, 64); err != nil {
@@ -311,6 +330,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 		// 12 bytes: ISRC.
 		var isrc [12]byte
 		copy(isrc[:], track.ISRC)
+
 		if _, err := bw.Write(isrc[:]); err != nil {
 			return err
 		}
@@ -328,6 +348,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 		if err := bw.WriteBits(0, 6); err != nil {
 			return err
 		}
+
 		if _, err := io.CopyN(bw, ioutilx.Zero, 13); err != nil {
 			return err
 		}
@@ -336,6 +357,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 		if err := bw.WriteBits(uint64(len(track.Indicies)), 8); err != nil {
 			return err
 		}
+
 		for _, index := range track.Indicies {
 			// 64 bits: Offset.
 			if err := bw.WriteBits(index.Offset, 64); err != nil {
@@ -351,6 +373,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -360,6 +383,7 @@ func encodeCueSheet(bw *bitio.Writer, cs *meta.CueSheet, last bool) error {
 func encodePicture(bw *bitio.Writer, pic *meta.Picture, last bool) error {
 	// Store metadata block header.
 	nbits := int64(32 + 32 + 8*len(pic.MIME) + 32 + 8*len(pic.Desc) + 32 + 32 + 32 + 32 + 32 + 8*len(pic.Data))
+
 	hdr := &meta.Header{
 		IsLast: last,
 		Type:   meta.TypePicture,
@@ -414,5 +438,6 @@ func encodePicture(bw *bitio.Writer, pic *meta.Picture, last bool) error {
 	if _, err := bw.Write(pic.Data); err != nil {
 		return err
 	}
+
 	return nil
 }

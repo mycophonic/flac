@@ -26,6 +26,7 @@ func analyzeFixed(sf *frame.Subframe, bps uint) {
 	for order := 0; order <= 4 && order < len(sf.Samples); order++ {
 		residuals := computeFixedResiduals(sf.Samples, order)
 		k := chooseRice(residuals)
+
 		bits := costFixed(order, bps, residuals, k)
 		if bits < bestBits {
 			bestBits = bits
@@ -58,7 +59,7 @@ func computeFixedResiduals(samples []int32, order int) []int32 {
 	switch order {
 	case 0:
 		// x_0[n] = 0
-		for i := 0; i < n; i++ {
+		for i := range n {
 			res = append(res, samples[i])
 		}
 	case 1:
@@ -86,6 +87,7 @@ func computeFixedResiduals(samples []int32, order int) []int32 {
 			res = append(res, samples[i]-predicted)
 		}
 	}
+
 	return res
 }
 
@@ -95,18 +97,21 @@ func chooseRice(residuals []int32) uint {
 	bestK := uint(0)
 	bestBits := int(^uint(0) >> 1)
 
-	for k := uint(0); k < 15; k++ { // 15 is escape code, so evaluate 0..14
+	for k := range uint(15) { // 15 is escape code, so evaluate 0..14
 		bits := 0
+
 		for _, r := range residuals {
 			folded := iobits.EncodeZigZag(r)
 			quo := folded >> k
 			bits += int(quo) + 1 + int(k) // unary + stop bit + k LSBs
 		}
+
 		if bits < bestBits {
 			bestBits = bits
 			bestK = k
 		}
 	}
+
 	return bestK
 }
 
@@ -118,6 +123,7 @@ func costFixed(order int, bps uint, residuals []int32, k uint) int {
 
 	// residual bits for chosen k
 	residBits := 0
+
 	for _, r := range residuals {
 		folded := iobits.EncodeZigZag(r)
 		quo := folded >> k
@@ -129,6 +135,7 @@ func costFixed(order int, bps uint, residuals []int32, k uint) int {
 	// 4 bits: partition order
 	// 4 bits: Rice parameter for partition 0
 	const headerBits = 8 + 2 + 4 + 4
+
 	return headerBits + warmUpBits + residBits
 }
 
@@ -144,6 +151,7 @@ func analyzeSubframe(sf *frame.Subframe, bps uint) {
 	}
 
 	samples := sf.Samples
+
 	n := len(samples)
 	if n == 0 {
 		return
@@ -157,12 +165,15 @@ func analyzeSubframe(sf *frame.Subframe, bps uint) {
 
 	// --- Constant predictor cost.
 	allEqual := true
+
 	for i := 1; i < n; i++ {
 		if samples[i] != samples[0] {
 			allEqual = false
+
 			break
 		}
 	}
+
 	constBits := int(^uint(0) >> 1) // max int
 	if allEqual {
 		// 8-bit header + one sample.

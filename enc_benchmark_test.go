@@ -35,8 +35,9 @@ func BenchmarkEncodeSyntheticAudio(b *testing.B) {
 
 	// Generate synthetic audio data (sine wave)
 	samples := make([]int32, nsamples*nchannels)
+
 	freq := 440.0 // A4 note
-	for i := 0; i < nsamples; i++ {
+	for i := range nsamples {
 		// Generate a sine wave
 		sample := int32(math.Sin(2*math.Pi*freq*float64(i)/float64(sampleRate)) * 32767)
 		// Fill both channels with the same data
@@ -78,10 +79,10 @@ func BenchmarkEncodeSyntheticAudio(b *testing.B) {
 
 			// Create subframes
 			f.Subframes = make([]*frame.Subframe, nchannels)
-			for channel := 0; channel < nchannels; channel++ {
+			for channel := range nchannels {
 				// Extract samples for this channel
 				channelSamples := make([]int32, blockSize)
-				for i := 0; i < blockSize; i++ {
+				for i := range blockSize {
 					channelSamples[i] = samples[(offset+i)*nchannels+channel]
 				}
 

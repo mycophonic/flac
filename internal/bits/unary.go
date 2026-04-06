@@ -31,6 +31,7 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 			br.n -= lz + 1
 			// Clear consumed bits: keep only the low br.n bits.
 			br.x &= (1 << br.n) - 1
+
 			return uint64(lz), nil
 		}
 		// All buffered bits are zero.
@@ -59,6 +60,7 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 				bitInByte := lz % 8
 				br.n = 7 - bitInByte
 				br.x = b & ((1 << br.n) - 1)
+
 				return x, nil
 			}
 			// All 8 bytes are zero.
@@ -70,21 +72,26 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 		for br.available() > 0 {
 			b := br.buf[br.pos]
 			br.pos++
+
 			if b == 0 {
 				x += 8
+
 				continue
 			}
 			// Found a byte with a 1-bit.
 			lz := uint(bits.LeadingZeros8(b))
 			x += uint64(lz)
+
 			br.consumeBytes(startPos, br.pos)
 			br.n = 7 - lz
 			br.x = b & ((1 << br.n) - 1)
+
 			return x, nil
 		}
 
 		// Buffer exhausted. Batch CRC for everything consumed so far, then refill.
 		br.consumeBytes(startPos, br.pos)
+
 		if err = br.fill(); err != nil {
 			return 0, err
 		}
@@ -111,9 +118,11 @@ func WriteUnary(bw *bitio.Writer, x uint64) error {
 	}
 
 	bits := uint64(1)
+
 	n := byte(x + 1)
 	if err := bw.WriteBits(bits, n); err != nil {
 		return err
 	}
+
 	return nil
 }

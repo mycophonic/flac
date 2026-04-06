@@ -10,15 +10,18 @@ import "io"
 func readString(r io.Reader, n int) (string, error) {
 	// readBuf is the local buffer used by readBytes.
 	var backingArray [4096]byte // hopefully allocated on stack.
+
 	readBuf := backingArray[:]
 	if n > len(readBuf) {
 		// The local buffer is initially 4096 bytes and will grow automatically if
 		// so required.
 		readBuf = make([]byte, n)
 	}
+
 	_, err := io.ReadFull(r, readBuf[:n])
 	if err != nil {
 		return "", err
 	}
+
 	return string(readBuf[:n]), nil
 }

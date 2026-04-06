@@ -22,6 +22,7 @@ func (block *Block) parseApplication() error {
 	// 32 bits: ID.
 	app := new(Application)
 	block.Body = app
+
 	err := binary.Read(block.lr, binary.BigEndian, &app.ID)
 	if err != nil {
 		return unexpected(err)
@@ -34,5 +35,6 @@ func (block *Block) parseApplication() error {
 
 	// (block length)-4 bytes: Data.
 	app.Data, err = io.ReadAll(block.lr)
+
 	return unexpected(err)
 }

@@ -58,6 +58,7 @@ func (block *Block) parsePicture() error {
 	// 32 bits: Type.
 	pic := new(Picture)
 	block.Body = pic
+
 	err := binary.Read(block.lr, binary.BigEndian, &pic.Type)
 	if err != nil {
 		return unexpected(err)
@@ -74,6 +75,7 @@ func (block *Block) parsePicture() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	pic.MIME = mime
 
 	// 32 bits: (description length).
@@ -86,6 +88,7 @@ func (block *Block) parsePicture() error {
 	if err != nil {
 		return unexpected(err)
 	}
+
 	pic.Desc = desc
 
 	// 32 bits: Width.
@@ -112,9 +115,11 @@ func (block *Block) parsePicture() error {
 	if err = binary.Read(block.lr, binary.BigEndian, &x); err != nil {
 		return unexpected(err)
 	}
+
 	if x == 0 {
 		return nil
 	}
+
 	if x > maxPictureDataSize {
 		return fmt.Errorf("meta.parsePicture: %w, picture data size=%d", ErrDeclaredBlockTooBig, x)
 	}
@@ -122,5 +127,6 @@ func (block *Block) parsePicture() error {
 	// (data length) bytes: Data.
 	pic.Data = make([]byte, x)
 	_, err = io.ReadFull(block.lr, pic.Data)
+
 	return unexpected(err)
 }

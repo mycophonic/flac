@@ -3,6 +3,7 @@ package flac_test
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,7 @@ func ExampleParseFile() {
 	defer stream.Close()
 
 	fmt.Printf("unencoded audio md5sum: %032x\n", stream.Info.MD5sum[:])
+
 	for i, block := range stream.Blocks {
 		fmt.Printf("block %d: %v\n", i, block.Type)
 	}
@@ -40,32 +42,39 @@ func ExampleOpen() {
 	// Parse audio samples and verify the MD5 signature of the decoded audio
 	// samples.
 	md5sum := md5.New()
+
 	for {
 		// Parse one frame of audio samples at the time, each frame containing one
 		// subframe per audio channel.
 		frame, err := stream.ParseNext()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			log.Fatal(err)
 		}
+
 		frame.Hash(md5sum)
 
 		// Print first three samples from each channel of the first five frames.
 		if frame.Num < 5 {
 			fmt.Printf("frame %d\n", frame.Num)
+
 			for i, subframe := range frame.Subframes {
 				fmt.Printf("  subframe %d\n", i)
+
 				for j, sample := range subframe.Samples {
 					if j >= 3 {
 						break
 					}
+
 					fmt.Printf("    sample %d: %v\n", j, sample)
 				}
 			}
 		}
 	}
+
 	fmt.Println()
 
 	got, want := md5sum.Sum(nil), stream.Info.MD5sum[:]

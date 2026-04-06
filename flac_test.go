@@ -1,6 +1,7 @@
 package flac_test
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,7 +24,7 @@ func TestSeek(t *testing.T) {
 
 	defer f.Close()
 
-	//Seek Table:
+	// Seek Table:
 	// {SampleNum:0 Offset:8283 NSamples:4096}
 	// {SampleNum:4096 Offset:17777 NSamples:4096}
 	// {SampleNum:8192 Offset:27141 NSamples:4096}
@@ -50,7 +51,8 @@ func TestSeek(t *testing.T) {
 		{seek: 100, expected: 0},
 		{seek: 8192, expected: 8192},
 		{seek: 8191, expected: 4096},
-		//{seek: 40960 + 2723 - 1, expected: 40960}, // last sample // TODO: re-enable when it works. See https://github.com/mewkiz/flac/pull/73
+		// {seek: 40960 + 2723 - 1, expected: 40960}, // last sample // TODO: re-enable when it works. See
+		// https://github.com/mewkiz/flac/pull/73
 		{seek: 40960 + 2723, expected: 0, err: "unable to seek to sample number 43683"}, // one after last sample
 	}
 
@@ -73,11 +75,10 @@ func TestSeek(t *testing.T) {
 			}
 
 			_, err = stream.ParseNext()
-			if err != nil && err != io.EOF {
+			if err != nil && !errors.Is(err, io.EOF) {
 				t.Fatal(err)
 			}
 		})
-
 	}
 }
 

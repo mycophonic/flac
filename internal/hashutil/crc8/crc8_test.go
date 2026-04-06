@@ -40,7 +40,10 @@ var golden = []test{
 	{0x96, "You remind me of a TV show, but that's all right: I watch it anyway."},
 	{0x96, "C is as portable as Stonehedge!!"},
 	{0x3C, "Even if I could be Shakespeare, I think I should still choose to be Faraday. - A. Huxley"},
-	{0xEE, "The fugacity of a constituent in a mixture of gases at a given temperature is proportional to its mole fraction.  Lewis-Randall Rule"},
+	{
+		0xEE,
+		"The fugacity of a constituent in a mixture of gases at a given temperature is proportional to its mole fraction.  Lewis-Randall Rule",
+	},
 	{0x33, "How can you write a big system without C++?  -Paul Glick"},
 	{0xC1, "The quick brown fox jumps over the lazy dog"},
 }
@@ -50,8 +53,10 @@ func TestCrc8ATM(t *testing.T) {
 		h := NewATM()
 		if _, err := io.WriteString(h, g.in); err != nil {
 			t.Error(err)
+
 			continue
 		}
+
 		got := h.Sum8()
 		if got != g.want {
 			t.Errorf("ATM(%q); expected 0x%02X, got 0x%02X.", g.in, g.want, got)
@@ -60,7 +65,7 @@ func TestCrc8ATM(t *testing.T) {
 }
 
 func BenchmarkNewATM(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		NewATM()
 	}
 }
@@ -87,20 +92,26 @@ func BenchmarkCrc8_16K(b *testing.B) {
 
 func benchmarkCrc8(b *testing.B, count int64) {
 	b.SetBytes(count)
+
 	data := make([]byte, count)
 	for i := range data {
 		data[i] = byte(i)
 	}
+
 	h := NewATM()
 	in := make([]byte, 0, h.Size())
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		h.Reset()
+
 		if _, err := h.Write(data); err != nil {
 			b.Error(err)
+
 			continue
 		}
+
 		h.Sum(in)
 	}
 }

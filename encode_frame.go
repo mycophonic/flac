@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/icza/bitio"
+
 	"github.com/mycophonic/flac/frame"
 	"github.com/mycophonic/flac/internal/hashutil/crc16"
 	"github.com/mycophonic/flac/internal/hashutil/crc8"
@@ -23,12 +24,19 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	if nchannels != len(f.Subframes) {
 		return fmt.Errorf("subframe and channel count mismatch; expected %d, got %d", nchannels, len(f.Subframes))
 	}
+
 	nsamplesPerChannel := f.Subframes[0].NSamples
 	for i, subframe := range f.Subframes {
 		if nsamplesPerChannel != len(subframe.Samples) {
-			return fmt.Errorf("invalid number of samples in channel %d; expected %d, got %d", i, nsamplesPerChannel, len(subframe.Samples))
+			return fmt.Errorf(
+				"invalid number of samples in channel %d; expected %d, got %d",
+				i,
+				nsamplesPerChannel,
+				len(subframe.Samples),
+			)
 		}
 	}
+
 	if nchannels != f.Channels.Count() {
 		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
 	}
@@ -45,11 +53,14 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	} else {
 		enc.curNum += uint64(nsamplesPerChannel)
 	}
+
 	enc.nsamples += uint64(nsamplesPerChannel)
+
 	blockSize := uint16(nsamplesPerChannel)
 	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
 		enc.blockSizeMin = blockSize
 	}
+
 	if enc.blockSizeMax == 0 || blockSize > enc.blockSizeMax {
 		enc.blockSizeMax = blockSize
 	}
@@ -57,6 +68,7 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// frameSizeMin and frameSizeMax.
 	// Add unencoded audio samples to running MD5 hash.
 	f.Hash(enc.md5sum)
+
 	if err := enc.encodeFrameHeader(hw, f.Header); err != nil {
 		return err
 	}
@@ -67,6 +79,7 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 
 	// Encode subframes.
 	bw := bitio.NewWriter(hw)
+
 	for channel, subframe := range f.Subframes {
 		// The side channel requires an extra bit per sample when using
 		// inter-channel decorrelation.
@@ -226,6 +239,7 @@ func encodeFrameHeaderBlockSize(bw *bitio.Writer, blockSize uint16) (nblockSizeS
 	//    0111 : get 16 bit (blocksize-1) from end of header
 	//    1000-1111 : 256 * (2^(n-8)) samples, i.e. 256/512/1024/2048/4096/8192/16384/32768
 	var bits uint64
+
 	switch blockSize {
 	case 192:
 		// 0001
@@ -247,9 +261,11 @@ func encodeFrameHeaderBlockSize(bw *bitio.Writer, blockSize uint16) (nblockSizeS
 			nblockSizeSuffixBits = 16
 		}
 	}
+
 	if err := bw.WriteBits(bits, 4); err != nil {
 		return 0, err
 	}
+
 	return nblockSizeSuffixBits, nil
 }
 
@@ -258,7 +274,10 @@ func encodeFrameHeaderBlockSize(bw *bitio.Writer, blockSize uint16) (nblockSizeS
 // encodeFrameHeaderSampleRate encodes the sample rate of the frame header,
 // writing to bw. It returns the bits and the number of bits used to store
 // sample rate after the frame header.
-func encodeFrameHeaderSampleRate(bw *bitio.Writer, sampleRate uint32) (sampleRateSuffixBits uint64, nsampleRateSuffixBits byte, err error) {
+func encodeFrameHeaderSampleRate(
+	bw *bitio.Writer,
+	sampleRate uint32,
+) (sampleRateSuffixBits uint64, nsampleRateSuffixBits byte, err error) {
 	// Sample rate:
 	//    0000 : get from STREAMINFO metadata block
 	//    0001 : 88.2kHz
@@ -277,6 +296,7 @@ func encodeFrameHeaderSampleRate(bw *bitio.Writer, sampleRate uint32) (sampleRat
 	//    1110 : get 16 bit sample rate (in tens of Hz) from end of header
 	//    1111 : invalid, to prevent sync-fooling string of 1s
 	var bits uint64
+
 	switch sampleRate {
 	case 0:
 		// 0000 : get from STREAMINFO metadata block
@@ -335,9 +355,11 @@ func encodeFrameHeaderSampleRate(bw *bitio.Writer, sampleRate uint32) (sampleRat
 			return 0, 0, fmt.Errorf("unable to encode sample rate %v", sampleRate)
 		}
 	}
+
 	if err := bw.WriteBits(bits, 4); err != nil {
 		return 0, 0, err
 	}
+
 	return sampleRateSuffixBits, nsampleRateSuffixBits, nil
 }
 
@@ -347,7 +369,8 @@ func encodeFrameHeaderSampleRate(bw *bitio.Writer, sampleRate uint32) (sampleRat
 // header, writing to bw.
 func encodeFrameHeaderChannels(bw *bitio.Writer, channels frame.Channels) error {
 	// Channel assignment.
-	//    0000-0111 : (number of independent channels)-1. Where defined, the channel order follows SMPTE/ITU-R recommendations. The assignments are as follows:
+	// 0000-0111 : (number of independent channels)-1. Where defined, the channel order follows SMPTE/ITU-R
+	// recommendations. The assignments are as follows:
 	//        1 channel: mono
 	//        2 channels: left, right
 	//        3 channels: left, right, center
@@ -361,8 +384,16 @@ func encodeFrameHeaderChannels(bw *bitio.Writer, channels frame.Channels) error 
 	//    1010 : mid/side stereo: channel 0 is the mid(average) channel, channel 1 is the side(difference) channel
 	//    1011-1111 : reserved
 	var bits uint64
+
 	switch channels {
-	case frame.ChannelsMono, frame.ChannelsLR, frame.ChannelsLRC, frame.ChannelsLRLsRs, frame.ChannelsLRCLsRs, frame.ChannelsLRCLfeLsRs, frame.ChannelsLRCLfeCsSlSr, frame.ChannelsLRCLfeLsRsSlSr:
+	case frame.ChannelsMono,
+		frame.ChannelsLR,
+		frame.ChannelsLRC,
+		frame.ChannelsLRLsRs,
+		frame.ChannelsLRCLsRs,
+		frame.ChannelsLRCLfeLsRs,
+		frame.ChannelsLRCLfeCsSlSr,
+		frame.ChannelsLRCLfeLsRsSlSr:
 		// 1 channel: mono.
 		// 2 channels: left, right.
 		// 3 channels: left, right, center.
@@ -387,9 +418,11 @@ func encodeFrameHeaderChannels(bw *bitio.Writer, channels frame.Channels) error 
 	default:
 		return fmt.Errorf("support for channel assignment %v not yet implemented", channels)
 	}
+
 	if err := bw.WriteBits(bits, 4); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -408,6 +441,7 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	//    110 : 24 bits per sample
 	//    111 : 32 bits per sample (RFC 9639)
 	var bits uint64
+
 	switch bps {
 	case 0:
 		// 000 : get from STREAMINFO metadata block
@@ -433,8 +467,10 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	default:
 		return fmt.Errorf("support for sample size %v not yet implemented", bps)
 	}
+
 	if err := bw.WriteBits(bits, 3); err != nil {
 		return err
 	}
+
 	return nil
 }
