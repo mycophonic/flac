@@ -6,9 +6,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/icza/bitio"
-
 	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/hashutil/crc16"
 	"github.com/mycophonic/flac/internal/hashutil/crc8"
 	"github.com/mycophonic/flac/internal/utf8"
@@ -141,11 +140,8 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// everything before the crc, back to and including the frame header sync
 	// code.
 	crc := h.Sum16()
-	if err := binary.Write(enc.w, binary.BigEndian, crc); err != nil {
-		return err
-	}
 
-	return nil
+	return binary.Write(enc.w, binary.BigEndian, crc)
 }
 
 // --- [ Frame header ] --------------------------------------------------------

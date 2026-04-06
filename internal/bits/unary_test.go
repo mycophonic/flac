@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/bits"
 )
 

@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/ioutilx"
 	"github.com/mycophonic/flac/meta"
 )
@@ -88,7 +87,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 		return err
 	}
 	// 24 bits: Length.
-	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil { //nolint:gosec // value validated above to fit in 24 bits
+	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil {
 		return err
 	}
 

@@ -4,9 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/icza/bitio"
-
 	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/internal/bitio"
 	iobits "github.com/mycophonic/flac/internal/bits"
 )
 
@@ -130,10 +129,9 @@ func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 		}
 	}
 	// Unencoded constant value of the subblock, n = frame's bits-per-sample.
-	if err := bw.WriteBits(
-		uint64(sample), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-		uint8(bps), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-	); err != nil {
+	// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
+	//nolint:gosec
+	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 		return err
 	}
 
@@ -152,10 +150,9 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	}
 
 	for _, sample := range samples {
-		if err := bw.WriteBits(
-			uint64(sample), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-			uint8(bps), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-		); err != nil {
+		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
+		//nolint:gosec
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
 	}
@@ -172,10 +169,9 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	samples := subframe.Samples
 	for i := range subframe.Order {
 		sample := samples[i]
-		if err := bw.WriteBits(
-			uint64(sample), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-			uint8(bps), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-		); err != nil {
+		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
+		//nolint:gosec
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
 	}
@@ -206,10 +202,9 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	samples := subframe.Samples
 	for i := range subframe.Order {
 		sample := samples[i]
-		if err := bw.WriteBits(
-			uint64(sample), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-			uint8(bps), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-		); err != nil {
+		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
+		//nolint:gosec
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
 	}
@@ -220,20 +215,17 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	}
 
 	// 5 bits: predictor coefficient shift needed in bits.
-	if err := bw.WriteBits(
-		uint64(subframe.CoeffShift), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-		5,
-	); err != nil {
+	// CoeffShift is a 5-bit signed predictor coefficient shift per FLAC spec.
+	//nolint:gosec
+	if err := bw.WriteBits(uint64(subframe.CoeffShift), 5); err != nil {
 		return err
 	}
 
 	// Encode coefficients.
 	for _, coeff := range subframe.Coeffs {
-		// (prec) bits: Predictor coefficient.
-		if err := bw.WriteBits(
-			uint64(coeff), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-			uint8(subframe.CoeffPrec), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-		); err != nil {
+		// (prec) bits: Predictor coefficient. coeff is int32 bounded by CoeffPrec bits.
+		//nolint:gosec
+		if err := bw.WriteBits(uint64(coeff), uint8(subframe.CoeffPrec)); err != nil {
 			return err
 		}
 	}
@@ -374,10 +366,9 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 				residual := residuals[curResidualIndex]
 				curResidualIndex++
 
-				if err := bw.WriteBits(
-					uint64(residual), //nolint:gosec // int32->uint64 is bit reinterpretation for WriteBits, sample/coeff fits in 32 bits per FLAC spec
-					uint8(partition.EscapedBitsPerSample), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
-				); err != nil {
+				// residual is int32; EscapedBitsPerSample is FLAC-spec bounded (5-bit field).
+				//nolint:gosec
+				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil {
 					return err
 				}
 			}

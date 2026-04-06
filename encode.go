@@ -5,8 +5,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/meta"
 )
 

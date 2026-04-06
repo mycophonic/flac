@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"math/bits"
 
-	"github.com/icza/bitio"
+	"github.com/mycophonic/flac/internal/bitio"
 )
 
 // ReadUnary decodes and returns an unary coded integer, whose value is
