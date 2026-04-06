@@ -33,9 +33,5 @@ func DecodeZigZag(x uint32) int32 {
 //
 // ref: https://developers.google.com/protocol-buffers/docs/encoding
 func EncodeZigZag(x int32) uint32 {
-	if x < 0 {
-		x = -x
-		return uint32(x)<<1 - 1
-	}
-	return uint32(x) << 1
+	return uint32((x << 1) ^ (x >> 31))
 }

@@ -27,18 +27,14 @@
 package frame
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"log"
 
-	"github.com/mewkiz/flac/internal/bits"
-	"github.com/mewkiz/flac/internal/hashutil"
-	"github.com/mewkiz/flac/internal/hashutil/crc16"
-	"github.com/mewkiz/flac/internal/hashutil/crc8"
-	"github.com/mewkiz/flac/internal/utf8"
+	"github.com/mycophonic/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/utf8"
 )
 
 // A Frame contains the header and subframes of an audio frame. It holds the
@@ -51,42 +47,41 @@ type Frame struct {
 	Header
 	// One subframe per channel, containing encoded audio samples.
 	Subframes []*Subframe
-	// CRC-16 hash sum, calculated by read operations on hr.
-	crc hashutil.Hash16
-	// A bit reader, wrapping read operations to hr.
+	// A bit reader with internal 4KB buffer and inline CRC computation.
 	br *bits.Reader
-	// A CRC-16 hash reader, wrapping read operations to r.
-	hr io.Reader
-	// Underlying io.Reader.
-	r io.Reader
+	// Contiguous sample buffer shared by all subframes. Each subframe's
+	// Samples slice points into this buffer. Allocated once per frame to
+	// avoid per-subframe allocations.
+	samplesBuf []int32
 }
 
-// New creates a new Frame for accessing the audio samples of r. It reads and
-// parses an audio frame header. It returns io.EOF to signal a graceful end of
-// FLAC stream.
+// New creates a new Frame for accessing the audio samples via the provided bit
+// reader. It reads and parses an audio frame header, resetting CRC state for
+// the new frame. It returns io.EOF to signal a graceful end of FLAC stream.
+//
+// The bit reader must persist across frames (owned by the Stream) so that its
+// internal read-ahead buffer is not lost between frames.
 //
 // Call Frame.Parse to parse the audio samples of its subframes.
-func New(r io.Reader) (frame *Frame, err error) {
-	// Create a new CRC-16 hash reader which adds the data from all read
-	// operations to a running hash.
-	crc := crc16.NewIBM()
-	hr := io.TeeReader(r, crc)
+func New(br *bits.Reader) (frame *Frame, err error) {
+	// Reset CRC for the new frame.
+	br.EnableCRC16()
 
 	// Parse frame header.
-	frame = &Frame{crc: crc, hr: hr, r: r}
+	frame = &Frame{br: br}
 	err = frame.parseHeader()
 	return frame, err
 }
 
 // Parse reads and parses the header, and the audio samples from each subframe
-// of a frame. If the samples are inter-channel decorrelated between the
-// subframes, it correlates them. It returns io.EOF to signal a graceful end of
-// FLAC stream.
+// of a frame via the provided bit reader. If the samples are inter-channel
+// decorrelated between the subframes, it correlates them. It returns io.EOF to
+// signal a graceful end of FLAC stream.
 //
 // ref: https://www.xiph.org/flac/format.html#interchannel
-func Parse(r io.Reader) (frame *Frame, err error) {
+func Parse(br *bits.Reader) (frame *Frame, err error) {
 	// Parse frame header.
-	frame, err = New(r)
+	frame, err = New(br)
 	if err != nil {
 		return frame, err
 	}
@@ -96,16 +91,59 @@ func Parse(r io.Reader) (frame *Frame, err error) {
 	return frame, err
 }
 
+// ParseInto is like Parse but reuses pre-allocated buffers to avoid per-frame
+// heap allocations. samplesBuf must have capacity for at least
+// nChannels*blockSize int32 values. subframes must have length >= nChannels,
+// with each element pointing to a valid Subframe struct that will be reset and
+// reused.
+func ParseInto(br *bits.Reader, samplesBuf []int32, subframes []*Subframe) (*Frame, error) {
+	frame, err := New(br)
+	if err != nil {
+		return frame, err
+	}
+	err = frame.parseInto(samplesBuf, subframes)
+	return frame, err
+}
+
 // Parse reads and parses the audio samples from each subframe of the frame. If
 // the samples are inter-channel decorrelated between the subframes, it
 // correlates them.
 //
 // ref: https://www.xiph.org/flac/format.html#interchannel
 func (frame *Frame) Parse() error {
-	// Parse subframes.
-	frame.Subframes = make([]*Subframe, frame.Channels.Count())
-	var err error
-	for channel := range frame.Subframes {
+	// Allocate fresh buffers.
+	nChannels := frame.Channels.Count()
+	blockSize := int(frame.BlockSize)
+	frame.samplesBuf = make([]int32, nChannels*blockSize)
+	frame.Subframes = make([]*Subframe, nChannels)
+	for i := range frame.Subframes {
+		frame.Subframes[i] = new(Subframe)
+	}
+	return frame.parseSubframes()
+}
+
+// parseInto sets up the frame to use pre-allocated buffers and parses all
+// subframes.
+func (frame *Frame) parseInto(samplesBuf []int32, subframes []*Subframe) error {
+	nChannels := frame.Channels.Count()
+	blockSize := int(frame.BlockSize)
+	required := nChannels * blockSize
+	if required > len(samplesBuf) || nChannels > len(subframes) {
+		return fmt.Errorf("frame.Frame.parseInto: frame requires %d channels × %d block size, but buffers have %d samples and %d subframes",
+			nChannels, blockSize, len(samplesBuf), len(subframes))
+	}
+	frame.samplesBuf = samplesBuf[:required]
+	frame.Subframes = subframes[:nChannels]
+	return frame.parseSubframes()
+}
+
+// parseSubframes parses all subframe audio samples, correlates inter-channel
+// samples, verifies padding alignment and the CRC-16 footer. The frame's
+// Subframes slice and samplesBuf must already be set up before calling.
+func (frame *Frame) parseSubframes() error {
+	nChannels := frame.Channels.Count()
+	blockSize := int(frame.BlockSize)
+	for channel := range nChannels {
 		// The side channel requires an extra bit per sample when using
 		// inter-channel decorrelation.
 		bps := uint(frame.BitsPerSample)
@@ -122,9 +160,12 @@ func (frame *Frame) Parse() error {
 			}
 		}
 
-		// Parse subframe.
-		frame.Subframes[channel], err = frame.parseSubframe(frame.br, bps)
-		if err != nil {
+		// Slice the contiguous sample buffer for this channel's subframe.
+		off := channel * blockSize
+		samples := frame.samplesBuf[off : off : off+blockSize]
+
+		// Parse subframe into the pre-allocated struct.
+		if err := frame.parseSubframeInto(frame.br, bps, samples, frame.Subframes[channel]); err != nil {
 			return err
 		}
 	}
@@ -132,12 +173,27 @@ func (frame *Frame) Parse() error {
 	// Inter-channel correlation of subframe samples.
 	frame.Correlate()
 
+	// Zero-padding to byte alignment.
+	if !frame.br.IsAligned() {
+		padding, err := frame.br.Read(frame.br.BitsBuffered())
+		if err != nil {
+			return unexpected(err)
+		}
+		if padding != 0 {
+			return fmt.Errorf("frame.Frame.Parse: non-zero padding bits (%d)", padding)
+		}
+	}
+
 	// 2 bytes: CRC-16 checksum.
-	var want uint16
-	if err = binary.Read(frame.r, binary.BigEndian, &want); err != nil {
+	// Disable CRC-16 before reading the footer so the footer bytes are NOT
+	// included in the CRC-16 computation.
+	got := frame.br.CRC16()
+	frame.br.DisableCRC16()
+	crc16Val, err := frame.br.Read(16)
+	if err != nil {
 		return unexpected(err)
 	}
-	got := frame.crc.Sum16()
+	want := uint16(crc16Val)
 	if got != want {
 		return fmt.Errorf("frame.Frame.Parse: CRC-16 checksum mismatch; expected 0x%04X, got 0x%04X", want, got)
 	}
@@ -221,16 +277,15 @@ var (
 	ErrInvalidSync = errors.New("frame.Frame.parseHeader: invalid sync-code")
 )
 
+// maxSyncScan is the maximum number of zero bytes to skip when scanning for a
+// frame sync code through undeclared zero padding.
+const maxSyncScan = 32 << 20 // 32 MB
+
 // parseHeader reads and parses the header of an audio frame.
 func (frame *Frame) parseHeader() error {
-	// Create a new CRC-8 hash reader which adds the data from all read
-	// operations to a running hash.
-	h := crc8.NewATM()
-	hr := io.TeeReader(frame.hr, h)
-
-	// Create bit reader.
-	br := bits.NewReader(hr)
-	frame.br = br
+	// Enable CRC-8 accumulation for header verification.
+	br := frame.br
+	br.EnableCRC8()
 
 	// 14 bits: sync-code (11111111111110)
 	x, err := br.Read(14)
@@ -239,26 +294,34 @@ func (frame *Frame) parseHeader() error {
 		// a graceful end of a FLAC stream.
 		return err
 	}
-	if x != 0x3FFE {
-		return ErrInvalidSync
-	}
-
-	// 1 bit: reserved.
-	x, err = br.Read(1)
-	if err != nil {
-		return unexpected(err)
-	}
-	if x != 0 {
-		return errors.New("frame.Frame.parseHeader: non-zero reserved value")
-	}
-
-	// 1 bit: HasFixedBlockSize.
-	x, err = br.Read(1)
-	if err != nil {
-		return unexpected(err)
-	}
 	if x == 0 {
-		frame.HasFixedBlockSize = true
+		// All zeros: undeclared zero padding before the first audio frame
+		// (e.g. HDtracks FLAC files with 16 MB of zeros after metadata).
+		// Scan forward to the real sync code. On return, the reserved and
+		// blocking strategy bits have been consumed.
+		if err := frame.scanToSync(); err != nil {
+			return err
+		}
+	} else if x == 0x3FFE {
+		// 1 bit: reserved.
+		x, err = br.Read(1)
+		if err != nil {
+			return unexpected(err)
+		}
+		if x != 0 {
+			return errors.New("frame.Frame.parseHeader: non-zero reserved value")
+		}
+
+		// 1 bit: HasFixedBlockSize.
+		x, err = br.Read(1)
+		if err != nil {
+			return unexpected(err)
+		}
+		if x == 0 {
+			frame.HasFixedBlockSize = true
+		}
+	} else {
+		return ErrInvalidSync
 	}
 
 	// 4 bits: BlockSize. The block size parsing is simplified by deferring it to
@@ -298,7 +361,10 @@ func (frame *Frame) parseHeader() error {
 	//    1-6 bytes: UTF-8 encoded frame number.
 	// else
 	//    1-7 bytes: UTF-8 encoded sample number.
-	frame.Num, err = utf8.Decode(hr)
+	// Note: at this point exactly 32 bits (4 bytes) have been consumed, so the
+	// stream is byte-aligned. Read through the bit reader's byte adapter so
+	// bytes flow through the internal buffer and CRC computation.
+	frame.Num, err = utf8.Decode(br.ByteReader())
 	if err != nil {
 		return unexpected(err)
 	}
@@ -314,16 +380,100 @@ func (frame *Frame) parseHeader() error {
 	}
 
 	// 1 byte: CRC-8 checksum.
-	var want uint8
-	if err = binary.Read(frame.hr, binary.BigEndian, &want); err != nil {
+	// Disable CRC-8 before reading the checksum byte so it is not included
+	// in the CRC-8 computation. The byte still flows through CRC-16.
+	br.DisableCRC8()
+	crc8Val, err := br.Read(8)
+	if err != nil {
 		return unexpected(err)
 	}
-	got := h.Sum8()
+	want := uint8(crc8Val)
+	got := br.CRC8()
 	if want != got {
 		return fmt.Errorf("frame.Frame.parseHeader: CRC-8 checksum mismatch; expected 0x%02X, got 0x%02X", want, got)
 	}
 
 	return nil
+}
+
+// scanToSync scans forward through undeclared zero padding to locate the next
+// FLAC frame sync code.
+//
+// Some FLAC files (e.g. from HDtracks) contain large blocks of zero bytes
+// between the last metadata block and the first audio frame that are not
+// declared as FLAC Padding metadata. Standard decoders (libFLAC, ffmpeg) fail
+// on these files because they expect audio frames immediately after metadata.
+//
+// Precondition: the caller's Read(14) returned all zeros, leaving 2 zero bits
+// buffered. On return, the full 16-bit sync word (sync code + reserved +
+// blocking strategy) has been consumed, HasFixedBlockSize is set, and
+// CRC-8/CRC-16 have been reset and seeded with the two sync bytes.
+func (frame *Frame) scanToSync() error {
+	br := frame.br
+
+	// The caller's Read(14) consumed 2 zero bytes with 2 bits still buffered.
+	// Drain them before switching to byte-aligned scanning.
+	if n := br.BitsBuffered(); n > 0 {
+		pad, err := br.Read(n)
+		if err != nil {
+			return unexpected(err)
+		}
+
+		if pad != 0 {
+			return ErrInvalidSync
+		}
+	}
+
+	// Scan byte-by-byte through zeros for the first sync byte (0xFF).
+	// Only zero bytes are tolerated; any non-zero byte that is not 0xFF
+	// is treated as corruption.
+	for skipped := 0; skipped < maxSyncScan; skipped++ {
+		b, err := br.Read(8)
+		if err != nil {
+			if err == io.EOF {
+				return io.ErrUnexpectedEOF
+			}
+
+			return err
+		}
+
+		if b == 0 {
+			continue
+		}
+
+		if b != 0xFF {
+			return ErrInvalidSync
+		}
+
+		// Found 0xFF. Read the second byte of the sync word.
+		// Valid patterns:
+		//   0xFFF8 = sync(0x3FFE) + reserved(0) + blocking(0) → fixed block size
+		//   0xFFF9 = sync(0x3FFE) + reserved(0) + blocking(1) → variable block size
+		next, err := br.Read(8)
+		if err != nil {
+			return unexpected(err)
+		}
+
+		switch next {
+		case 0xF8:
+			frame.HasFixedBlockSize = true
+		case 0xF9:
+			// Variable block size; HasFixedBlockSize stays false.
+		default:
+			return ErrInvalidSync
+		}
+
+		// Reset CRC checksums to start from this frame and seed with the
+		// two sync bytes so the header CRC covers the complete frame header.
+		syncBytes := [2]byte{0xFF, byte(next)}
+		br.EnableCRC16()
+		br.EnableCRC8()
+		br.FeedCRC(syncBytes[:])
+
+		return nil
+	}
+
+	return ErrInvalidSync
 }
 
 // parseBitsPerSample parses the bits per sample of the header.
@@ -471,8 +621,6 @@ func (frame *Frame) parseSampleRate(br *bits.Reader, sampleRate uint64) error {
 	case 0x2:
 		// 0010: 176.4 kHz.
 		frame.SampleRate = 176400
-		// TODO(u): Remove log message when the test cases have been extended.
-		log.Printf("frame.Frame.parseHeader: The flac library test cases do not yet include any audio files with sample rate %d. If possible please consider contributing this audio sample to improve the reliability of the test cases.", frame.SampleRate)
 	case 0x3:
 		// 0011: 192 kHz.
 		frame.SampleRate = 192000
@@ -488,8 +636,6 @@ func (frame *Frame) parseSampleRate(br *bits.Reader, sampleRate uint64) error {
 	case 0x7:
 		// 0111: 24 kHz.
 		frame.SampleRate = 24000
-		// TODO(u): Remove log message when the test cases have been extended.
-		log.Printf("frame.Frame.parseHeader: The flac library test cases do not yet include any audio files with sample rate %d. If possible please consider contributing this audio sample to improve the reliability of the test cases.", frame.SampleRate)
 	case 0x8:
 		// 1000: 32 kHz.
 		frame.SampleRate = 32000
@@ -616,17 +762,20 @@ func (frame *Frame) Correlate() {
 		for i := range side {
 			// left = (2*mid + side)/2
 			// right = (2*mid - side)/2
-			m := mid[i]
-			s := side[i]
-			m *= 2
+			//
+			// Use int64 to avoid overflow: for 32bps audio, mid values can
+			// reach 2^31-1 and m*2 overflows int32, producing wrong output.
+			m := int64(mid[i])
+			s := int64(side[i])
+			m <<= 1
 			// Notice that the integer division in mid = (left + right)/2 discards
 			// the least significant bit. It can be reconstructed however, since a
 			// sum A+B and a difference A-B has the same least significant bit.
 			//
 			// ref: Data Compression: The Complete Reference (ch. 7, Decorrelation)
 			m |= s & 1
-			mid[i] = (m + s) / 2
-			side[i] = (m - s) / 2
+			mid[i] = int32((m + s) >> 1)
+			side[i] = int32((m - s) >> 1)
 		}
 	}
 }

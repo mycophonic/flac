@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"slices"
 	"testing"
 
-	"github.com/mewkiz/flac"
-	"github.com/mewkiz/flac/meta"
+	"github.com/mycophonic/flac"
+	"github.com/mycophonic/flac/meta"
 )
 
 var paths = []string{
@@ -180,7 +179,7 @@ func TestEncodeRoundTrip(t *testing.T) {
 			}
 
 			// Compare source and destination FLAC streams.
-			want, err := ioutil.ReadFile(path)
+			want, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatalf("%q: unable to read file; %v", path, err)
 			}

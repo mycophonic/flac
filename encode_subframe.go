@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/flac/frame"
-	iobits "github.com/mewkiz/flac/internal/bits"
 	"github.com/mewkiz/pkg/errutil"
+	"github.com/mycophonic/flac/frame"
+	iobits "github.com/mycophonic/flac/internal/bits"
 )
 
 // --- [ Subframe ] ------------------------------------------------------------

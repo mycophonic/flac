@@ -1,3 +1,7 @@
-*.flac
-*.wav
-_resources_
+.DS_Store
+.idea
+_*
+bin
+tmp
+third-party
+generated

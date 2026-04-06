@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mewkiz/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/bits"
 )
 
 // A Subframe contains the encoded audio samples from one channel of an audio
@@ -23,22 +23,41 @@ type Subframe struct {
 	Samples []int32
 	// Number of audio samples in the subframe.
 	NSamples int
+
+	// Reusable buffers preserved across frames to avoid per-frame allocations.
+
+	// coeffsBuf holds LPC predictor coefficients. Max LPC order is 32 per spec.
+	coeffsBuf [32]int32
+	// partitionsBuf holds Rice partitions (grow-only across frames).
+	partitionsBuf []RicePartition
+	// verbatimBuf holds raw bytes for aligned verbatim decoding (grow-only).
+	verbatimBuf []byte
 }
 
-// parseSubframe reads and parses the header, and the audio samples of a
-// subframe.
-func (frame *Frame) parseSubframe(br *bits.Reader, bps uint) (subframe *Subframe, err error) {
+// parseSubframeInto reads and parses the header, and the audio samples of a
+// subframe into the provided Subframe struct, which is reset before use. This
+// allows callers to reuse Subframe allocations across frames.
+func (frame *Frame) parseSubframeInto(br *bits.Reader, bps uint, samples []int32, subframe *Subframe) error {
+	// Save reusable buffers before reset.
+	partitionsBuf := subframe.partitionsBuf
+	verbatimBuf := subframe.verbatimBuf
+
+	// Reset subframe for reuse, then restore reusable buffers.
+	*subframe = Subframe{}
+	subframe.partitionsBuf = partitionsBuf
+	subframe.verbatimBuf = verbatimBuf
+
 	// Parse subframe header.
-	subframe = new(Subframe)
-	if err = subframe.parseHeader(br); err != nil {
-		return subframe, err
+	if err := subframe.parseHeader(br); err != nil {
+		return err
 	}
 	// Adjust bps of subframe for wasted bits-per-sample.
 	bps -= subframe.Wasted
 
 	// Decode subframe audio samples.
 	subframe.NSamples = int(frame.BlockSize)
-	subframe.Samples = make([]int32, 0, subframe.NSamples)
+	subframe.Samples = samples[:subframe.NSamples]
+	var err error
 	switch subframe.Pred {
 	case PredConstant:
 		err = subframe.decodeConstant(br, bps)
@@ -54,7 +73,7 @@ func (frame *Frame) parseSubframe(br *bits.Reader, bps uint) (subframe *Subframe
 	for i, sample := range subframe.Samples {
 		subframe.Samples[i] = sample << subframe.Wasted
 	}
-	return subframe, err
+	return err
 }
 
 // A SubHeader specifies the prediction method and order of a subframe.
@@ -240,8 +259,8 @@ func (subframe *Subframe) decodeConstant(br *bits.Reader, bps uint) error {
 
 	// Each sample of the subframe has the same constant value.
 	sample := signExtend(x, bps)
-	for i := 0; i < subframe.NSamples; i++ {
-		subframe.Samples = append(subframe.Samples, sample)
+	for i := range subframe.Samples {
+		subframe.Samples[i] = sample
 	}
 
 	return nil
@@ -251,16 +270,73 @@ func (subframe *Subframe) decodeConstant(br *bits.Reader, bps uint) error {
 //
 // ref: https://www.xiph.org/flac/format.html#subframe_verbatim
 func (subframe *Subframe) decodeVerbatim(br *bits.Reader, bps uint) error {
-	// Parse the unencoded audio samples of the subframe.
-	for i := 0; i < subframe.NSamples; i++ {
-		// (bits-per-sample) bits: Unencoded constant value of the subblock.
+	// Fast path: bulk read for byte-aligned bit depths (8, 16, 24, 32).
+	if bps%8 == 0 && br.IsAligned() {
+		return subframe.decodeVerbatimAligned(br, bps)
+	}
+
+	// Slow path: bit-by-bit for non-aligned depths (12, 20, etc).
+	for i := range subframe.Samples {
 		x, err := br.Read(bps)
 		if err != nil {
 			return unexpected(err)
 		}
-		sample := signExtend(x, bps)
-		subframe.Samples = append(subframe.Samples, sample)
+		subframe.Samples[i] = signExtend(x, bps)
 	}
+	return nil
+}
+
+// decodeVerbatimAligned reads verbatim samples in bulk for byte-aligned bit
+// depths. All bytes are read in a single I/O call, then unpacked into samples.
+func (subframe *Subframe) decodeVerbatimAligned(br *bits.Reader, bps uint) error {
+	bytesPerSample := int(bps / 8)
+	needed := subframe.NSamples * bytesPerSample
+	// Reuse the grow-only verbatim buffer across frames.
+	if cap(subframe.verbatimBuf) < needed {
+		subframe.verbatimBuf = make([]byte, needed)
+	}
+	buf := subframe.verbatimBuf[:needed]
+	if err := br.ReadAligned(buf); err != nil {
+		return unexpected(err)
+	}
+
+	subframe.Samples = subframe.Samples[:subframe.NSamples]
+
+	switch bps {
+	case 8:
+		for i, b := range buf {
+			subframe.Samples[i] = signExtend(uint64(b), 8)
+		}
+	case 16:
+		for i := range subframe.NSamples {
+			off := i * 2
+			x := uint64(buf[off])<<8 | uint64(buf[off+1])
+			subframe.Samples[i] = signExtend(x, 16)
+		}
+	case 24:
+		for i := range subframe.NSamples {
+			off := i * 3
+			x := uint64(buf[off])<<16 | uint64(buf[off+1])<<8 | uint64(buf[off+2])
+			subframe.Samples[i] = signExtend(x, 24)
+		}
+	case 32:
+		for i := range subframe.NSamples {
+			off := i * 4
+			x := uint64(buf[off])<<24 | uint64(buf[off+1])<<16 | uint64(buf[off+2])<<8 | uint64(buf[off+3])
+			subframe.Samples[i] = signExtend(x, 32)
+		}
+	default:
+		// Generic aligned path for other multiples of 8.
+		for i := range subframe.NSamples {
+			off := i * bytesPerSample
+			var x uint64
+			for j := range bytesPerSample {
+				x = x<<8 | uint64(buf[off+j])
+			}
+			subframe.Samples[i] = signExtend(x, bps)
+		}
+	}
+
 	return nil
 }
 
@@ -287,14 +363,13 @@ var FixedCoeffs = [...][]int32{
 // ref: https://www.xiph.org/flac/format.html#subframe_fixed
 func (subframe *Subframe) decodeFixed(br *bits.Reader, bps uint) error {
 	// Parse unencoded warm-up samples.
-	for i := 0; i < subframe.Order; i++ {
+	for i := range subframe.Order {
 		// (bits-per-sample) bits: Unencoded warm-up sample.
 		x, err := br.Read(bps)
 		if err != nil {
 			return unexpected(err)
 		}
-		sample := signExtend(x, bps)
-		subframe.Samples = append(subframe.Samples, sample)
+		subframe.Samples[i] = signExtend(x, bps)
 	}
 
 	// Decode subframe residuals.
@@ -315,14 +390,13 @@ func (subframe *Subframe) decodeFixed(br *bits.Reader, bps uint) error {
 // ref: https://www.xiph.org/flac/format.html#subframe_lpc
 func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 	// Parse unencoded warm-up samples.
-	for i := 0; i < subframe.Order; i++ {
+	for i := range subframe.Order {
 		// (bits-per-sample) bits: Unencoded warm-up sample.
 		x, err := br.Read(bps)
 		if err != nil {
 			return unexpected(err)
 		}
-		sample := signExtend(x, bps)
-		subframe.Samples = append(subframe.Samples, sample)
+		subframe.Samples[i] = signExtend(x, bps)
 	}
 
 	// 4 bits: (coefficients' precision in bits) - 1.
@@ -344,8 +418,8 @@ func (subframe *Subframe) decodeFIR(br *bits.Reader, bps uint) error {
 	shift := signExtend(x, 5)
 	subframe.CoeffShift = shift
 
-	// Parse coefficients.
-	coeffs := make([]int32, subframe.Order)
+	// Parse coefficients using the fixed-size buffer (max LPC order is 32).
+	coeffs := subframe.coeffsBuf[:subframe.Order]
 	for i := range coeffs {
 		// (prec) bits: Predictor coefficient.
 		x, err = br.Read(prec)
@@ -417,6 +491,14 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 		return unexpected(err)
 	}
 	partOrder := int(x)
+
+	// FLAC spec: block_size / (2^partition_order) must be >= predictor_order.
+	// A malformed file violating this produces negative sample counts per partition.
+	nparts := 1 << partOrder
+	if subframe.NSamples/nparts < subframe.Order {
+		return fmt.Errorf("frame.Subframe.decodeRicePart: partition order %d too large for block size %d with predictor order %d", partOrder, subframe.NSamples, subframe.Order)
+	}
+
 	riceSubframe := &RiceSubframe{
 		PartOrder: partOrder,
 	}
@@ -426,10 +508,17 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 	//
 	// ref: https://www.xiph.org/flac/format.html#rice_partition
 	// ref: https://www.xiph.org/flac/format.html#rice2_partition
-	nparts := 1 << partOrder
-	partitions := make([]RicePartition, nparts)
+	// Reuse the grow-only partition buffer across frames.
+	if cap(subframe.partitionsBuf) < nparts {
+		subframe.partitionsBuf = make([]RicePartition, nparts)
+	}
+	partitions := subframe.partitionsBuf[:nparts]
+	// Zero the partition structs for reuse.
+	clear(partitions)
 	riceSubframe.Partitions = partitions
-	for i := 0; i < nparts; i++ {
+	// Write cursor into subframe.Samples, starting after warm-up samples.
+	sIdx := subframe.Order
+	for i := range nparts {
 		partition := &partitions[i]
 		// (4 or 5) bits: Rice parameter.
 		x, err = br.Read(paramSize)
@@ -458,7 +547,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 			}
 			n := uint(x)
 			partition.EscapedBitsPerSample = n
-			for j := 0; j < nsamples; j++ {
+			for range nsamples {
 				sample, err := br.Read(n)
 				if err != nil {
 					return unexpected(err)
@@ -471,43 +560,24 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 				// complement.  For example, when a partition is escaped and each
 				// residual sample is stored with 3 bits, the number -1 is
 				// represented as 0b111.
-				subframe.Samples = append(subframe.Samples, int32(bits.IntN(sample, n)))
+				subframe.Samples[sIdx] = int32(bits.IntN(sample, n))
+				sIdx++
 			}
 			continue
 		}
 
 		// Decode the Rice encoded residuals of the partition.
-		for j := 0; j < nsamples; j++ {
-			residual, err := subframe.decodeRiceResidual(br, param)
+		for range nsamples {
+			residual, err := br.ReadRice(param)
 			if err != nil {
-				return err
+				return unexpected(err)
 			}
-			subframe.Samples = append(subframe.Samples, residual)
+			subframe.Samples[sIdx] = residual
+			sIdx++
 		}
 	}
 
 	return nil
-}
-
-// decodeRiceResidual decodes and returns a Rice encoded residual (error
-// signal).
-func (subframe *Subframe) decodeRiceResidual(br *bits.Reader, k uint) (int32, error) {
-	// Read unary encoded most significant bits.
-	high, err := br.ReadUnary()
-	if err != nil {
-		return 0, unexpected(err)
-	}
-
-	// Read binary encoded least significant bits.
-	low, err := br.Read(k)
-	if err != nil {
-		return 0, unexpected(err)
-	}
-	folded := uint32(high<<k | low)
-
-	// ZigZag decode.
-	residual := bits.DecodeZigZag(folded)
-	return residual, nil
 }
 
 // decodeLPC decodes linear prediction coded audio samples, using the

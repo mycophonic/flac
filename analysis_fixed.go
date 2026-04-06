@@ -1,8 +1,8 @@
 package flac
 
 import (
-	"github.com/mewkiz/flac/frame"
-	iobits "github.com/mewkiz/flac/internal/bits"
+	"github.com/mycophonic/flac/frame"
+	iobits "github.com/mycophonic/flac/internal/bits"
 )
 
 // analyzeFixed selects the best fixed predictor (order 0-4) for the given
@@ -111,8 +111,8 @@ func chooseRice(residuals []int32) uint {
 }
 
 // costFixed returns the number of bits needed to code the subframe with the
-// given parameters. 6 bits for the subframe header are included so orders with
-// more warm-up samples are fairly compared.
+// given parameters. Includes the subframe header, warm-up samples, residual
+// coding overhead, and all Rice-coded residuals.
 func costFixed(order int, bps uint, residuals []int32, k uint) int {
 	warmUpBits := order * int(bps)
 
@@ -124,8 +124,12 @@ func costFixed(order int, bps uint, residuals []int32, k uint) int {
 		residBits += int(quo) + 1 + int(k)
 	}
 
-	// Subframe header is 6 bits + 1 wasted flag bit (always 0 here)
-	return 6 + warmUpBits + residBits
+	// 8 bits: subframe header (1 zero-pad + 6 pred type/order + 1 wasted flag)
+	// 2 bits: residual coding method
+	// 4 bits: partition order
+	// 4 bits: Rice parameter for partition 0
+	const headerBits = 8 + 2 + 4 + 4
+	return headerBits + warmUpBits + residBits
 }
 
 // analyzeSubframe decides on the best prediction method (constant, verbatim, or
@@ -161,12 +165,12 @@ func analyzeSubframe(sf *frame.Subframe, bps uint) {
 	}
 	constBits := int(^uint(0) >> 1) // max int
 	if allEqual {
-		// 6-bit header + one sample.
-		constBits = 6 + int(bps)
+		// 8-bit header + one sample.
+		constBits = 8 + int(bps)
 	}
 
 	// --- Verbatim predictor cost.
-	verbatimBits := 6 + n*int(bps) // 6-bit header + raw samples
+	verbatimBits := 8 + n*int(bps) // 8-bit header + raw samples
 
 	// --- Fixed predictor: reuse existing helper to find best order/k.
 	analyzeFixed(sf, bps) // fills Order, RiceSubframe, etc.
