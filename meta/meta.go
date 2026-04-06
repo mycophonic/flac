@@ -144,20 +144,17 @@ type Header struct {
 // parseHeader reads and parses the header of a metadata block.
 // The header is always exactly 4 bytes (32 bits): 1 bit IsLast, 7 bits Type,
 // 24 bits Length. Read directly to avoid buffering overhead.
+//
+// io.ReadFull returns io.EOF when zero bytes are read (clean end at the
+// metadata boundary) and io.ErrUnexpectedEOF when 1-3 bytes are read (a
+// truncated header, indicating stream corruption). Both are propagated as-is
+// so callers can distinguish between graceful end and truncation. Note that
+// valid FLAC streams always contain at least one audio frame after the last
+// metadata block, so an io.EOF here is still invalid at the stream level —
+// that policy is enforced by the flac package, not here.
 func (block *Block) parseHeader(r io.Reader) error {
 	var buf [4]byte
 	if _, err := io.ReadFull(r, buf[:]); err != nil {
-		// This is the only place a metadata block may return io.EOF, which
-		// signals a graceful end of a FLAC stream (from a metadata point of
-		// view).
-		//
-		// Note that valid FLAC streams always contain at least one audio frame
-		// after the last metadata block. Therefore an io.EOF error at this
-		// location is always invalid. This logic is to be handled by the flac
-		// package however.
-		if err == io.ErrUnexpectedEOF {
-			return io.EOF
-		}
 		return err
 	}
 
