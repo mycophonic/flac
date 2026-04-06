@@ -42,7 +42,7 @@ type Block struct {
 	Header
 	// Metadata block body of type *StreamInfo, *Application, ... etc. Body is
 	// initially nil, and gets populated by a call to Block.Parse.
-	Body interface{}
+	Body any
 	// Underlying io.Reader; limited by the length of the block body.
 	lr io.Reader
 }
