@@ -284,6 +284,7 @@ func Open(path string) (stream *Stream, err error) {
 
 	stream, err = New(f)
 	if err != nil {
+		_ = f.Close()
 		return nil, err
 	}
 
@@ -305,6 +306,7 @@ func ParseFile(path string) (stream *Stream, err error) {
 	}
 	stream, err = Parse(f)
 	if err != nil {
+		_ = f.Close()
 		return nil, err
 	}
 
