@@ -51,12 +51,12 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	if f.HasFixedBlockSize {
 		enc.curNum++
 	} else {
-		enc.curNum += uint64(nsamplesPerChannel)
+		enc.curNum += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
 	}
 
-	enc.nsamples += uint64(nsamplesPerChannel)
+	enc.nsamples += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
 
-	blockSize := uint16(nsamplesPerChannel)
+	blockSize := uint16(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
 	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
 		enc.blockSizeMin = blockSize
 	}
@@ -402,7 +402,7 @@ func encodeFrameHeaderChannels(bw *bitio.Writer, channels frame.Channels) error 
 		// 6 channels: left, right, center, LFE, left surround, right surround.
 		// 7 channels: left, right, center, LFE, center surround, side left, side right.
 		// 8 channels: left, right, center, LFE, left surround, right surround, side left, side right.
-		bits = uint64(channels.Count() - 1)
+		bits = uint64(channels.Count() - 1) //nolint:gosec // value bounded by FLAC spec field width
 	case frame.ChannelsLeftSide:
 		// 2 channels: left, side; using inter-channel decorrelation.
 		// 1000 : left/side stereo: channel 0 is the left channel, channel 1 is the side(difference) channel

@@ -26,8 +26,7 @@ var IBMTable = makeTable(IBM)
 
 // MakeTable returns the Table constructed from the specified polynomial.
 func MakeTable(poly uint16) (table *Table) {
-	switch poly {
-	case IBM:
+	if poly == IBM {
 		return IBMTable
 	}
 
@@ -106,7 +105,7 @@ func (d *digest) Sum16() uint16 {
 func (d *digest) Sum(in []byte) []byte {
 	s := d.Sum16()
 
-	return append(in, byte(s>>8), byte(s))
+	return append(in, byte(s>>8), byte(s)) //nolint:gosec // bounded by FLAC spec field constraints
 }
 
 // Checksum returns the CRC-16 checksum of data, using the polynomial

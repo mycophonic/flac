@@ -1,7 +1,7 @@
 package flac
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // FLAC spec mandates MD5 for sample integrity, not used as a security primitive
 	"hash"
 	"io"
 
@@ -45,7 +45,7 @@ func NewEncoder(w io.Writer, info *meta.StreamInfo, blocks ...*meta.Block) (*Enc
 			Blocks: blocks,
 		},
 		w:               w,
-		md5sum:          md5.New(),
+		md5sum:          md5.New(), //nolint:gosec // FLAC spec mandates MD5 for sample integrity, not used as a security primitive
 		AnalysisEnabled: true, // enable prediction analysis by default.
 	}
 

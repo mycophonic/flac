@@ -25,7 +25,7 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 		// Count leading zeros in the br.n high bits of br.x.
 		// br.x stores bits left-aligned within the low br.n bits,
 		// so shift to the top of a byte to use LeadingZeros8.
-		lz := uint(bits.LeadingZeros8(br.x << (8 - br.n)))
+		lz := uint(bits.LeadingZeros8(br.x << (8 - br.n))) //nolint:gosec // value bounded by FLAC spec field width
 		if lz < br.n {
 			// Found a 1-bit within the buffered bits.
 			br.n -= lz + 1
@@ -50,10 +50,10 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 		for br.available() >= 8 {
 			w := binary.BigEndian.Uint64(br.buf[br.pos:])
 			if w != 0 {
-				lz := uint(bits.LeadingZeros64(w))
+				lz := uint(bits.LeadingZeros64(w)) //nolint:gosec // value bounded by FLAC spec field width
 				x += uint64(lz)
 				// Advance past the zero bytes and the byte containing the 1-bit.
-				br.pos += int(lz/8) + 1
+				br.pos += int(lz/8) + 1 //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 				br.consumeBytes(startPos, br.pos)
 				// Buffer the remaining bits in the terminating byte.
 				b := br.buf[br.pos-1]
@@ -79,7 +79,7 @@ func (br *Reader) ReadUnary() (x uint64, err error) {
 				continue
 			}
 			// Found a byte with a 1-bit.
-			lz := uint(bits.LeadingZeros8(b))
+			lz := uint(bits.LeadingZeros8(b)) //nolint:gosec // value bounded by FLAC spec field width
 			x += uint64(lz)
 
 			br.consumeBytes(startPos, br.pos)

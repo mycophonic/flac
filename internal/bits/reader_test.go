@@ -14602,6 +14602,8 @@ func BenchmarkReadAlign64(b *testing.B) {
 }
 
 func benchmarkReads(b *testing.B, chunk, align int) {
+	b.Helper()
+
 	size := 1 << 12
 	buf, bits, _, last := prepareBenchmark(size, chunk, align)
 	b.SetBytes(int64(len(buf)))

@@ -233,7 +233,7 @@ func stringFromSZ(szStr string) string {
 		return szStr
 	}
 
-	return string(before)
+	return before
 }
 
 // CueSheetTrack contains the start offset of a track and other track specific

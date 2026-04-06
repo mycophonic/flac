@@ -18,10 +18,13 @@ func IntN(x uint64, n uint) int64 {
 	signBitMask := uint64(1 << (n - 1))
 	if x&signBitMask == 0 {
 		// positive.
-		return int64(x)
+		return int64(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 	}
 	// negative.
-	v := int64(x ^ signBitMask) // clear sign bit.
+	// clear sign bit.
+	//nolint:gosec // value bounded by bit-field width just read from the stream
+	v := int64(x ^ signBitMask)
+	//nolint:gosec // value bounded by bit-field width just read from the stream
 	v -= int64(signBitMask)
 
 	return v

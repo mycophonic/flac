@@ -345,7 +345,7 @@ func (a *byteReaderAdapter) Read(p []byte) (int, error) {
 			return i, err
 		}
 
-		p[i] = byte(x)
+		p[i] = byte(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 	}
 
 	return len(p), nil

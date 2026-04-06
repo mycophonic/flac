@@ -33,5 +33,5 @@ func DecodeZigZag(x uint32) int32 {
 //
 // ref: https://developers.google.com/protocol-buffers/docs/encoding
 func EncodeZigZag(x int32) uint32 {
-	return uint32((x << 1) ^ (x >> 31))
+	return uint32((x << 1) ^ (x >> 31)) //nolint:gosec // extracting bytes from sample value, intentional
 }

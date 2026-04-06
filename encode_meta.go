@@ -72,7 +72,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 		return err
 	}
 	// 24 bits: Length.
-	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil {
+	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil { //nolint:gosec // value is non-negative by construction
 		return err
 	}
 
@@ -235,7 +235,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	// 32 bits: vendor length.
 	// TODO: verify that little-endian encoding is used; otherwise, switch to
 	// using bw.WriteBits.
-	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Vendor))); err != nil {
+	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Vendor))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 		return err
 	}
 	// (vendor length) bits: Vendor.
@@ -244,7 +244,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	}
 	// Store tags.
 	// 32 bits: number of tags.
-	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Tags))); err != nil {
+	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Tags))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 		return err
 	}
 
@@ -253,7 +253,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 		//    NAME=VALUE
 		buf := fmt.Appendf(nil, "%s=%s", tag[0], tag[1])
 		// 32 bits: vector length
-		if err := binary.Write(bw, binary.LittleEndian, uint32(len(buf))); err != nil {
+		if err := binary.Write(bw, binary.LittleEndian, uint32(len(buf))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 			return err
 		}
 		// (vector length): vector.

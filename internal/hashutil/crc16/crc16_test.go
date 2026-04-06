@@ -91,6 +91,7 @@ func BenchmarkCrc16_16K(b *testing.B) {
 }
 
 func benchmarkCrc16(b *testing.B, count int64) {
+	b.Helper()
 	b.SetBytes(count)
 
 	data := make([]byte, count)

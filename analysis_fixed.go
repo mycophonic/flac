@@ -119,7 +119,7 @@ func chooseRice(residuals []int32) uint {
 // given parameters. Includes the subframe header, warm-up samples, residual
 // coding overhead, and all Rice-coded residuals.
 func costFixed(order int, bps uint, residuals []int32, k uint) int {
-	warmUpBits := order * int(bps)
+	warmUpBits := order * int(bps) //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 
 	// residual bits for chosen k
 	residBits := 0
@@ -127,7 +127,7 @@ func costFixed(order int, bps uint, residuals []int32, k uint) int {
 	for _, r := range residuals {
 		folded := iobits.EncodeZigZag(r)
 		quo := folded >> k
-		residBits += int(quo) + 1 + int(k)
+		residBits += int(quo) + 1 + int(k) //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 	}
 
 	// 8 bits: subframe header (1 zero-pad + 6 pred type/order + 1 wasted flag)
@@ -177,11 +177,13 @@ func analyzeSubframe(sf *frame.Subframe, bps uint) {
 	constBits := int(^uint(0) >> 1) // max int
 	if allEqual {
 		// 8-bit header + one sample.
-		constBits = 8 + int(bps)
+		constBits = 8 + int(bps) //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 	}
 
 	// --- Verbatim predictor cost.
-	verbatimBits := 8 + n*int(bps) // 8-bit header + raw samples
+	// 8-bit header + raw samples.
+	//nolint:gosec // value bounded by FLAC spec field width (bps <= 32)
+	verbatimBits := 8 + n*int(bps)
 
 	// --- Fixed predictor: reuse existing helper to find best order/k.
 	analyzeFixed(sf, bps) // fills Order, RiceSubframe, etc.

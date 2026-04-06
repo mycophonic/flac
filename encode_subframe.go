@@ -88,10 +88,10 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 		bits = 0x01
 	case frame.PredFixed:
 		// 001xxx : if(xxx <= 4) SUBFRAME_FIXED, xxx=order ; else reserved
-		bits = 0x08 | uint64(subHdr.Order)
+		bits = 0x08 | uint64(subHdr.Order) //nolint:gosec // value bounded by FLAC spec field width
 	case frame.PredFIR:
 		// 1xxxxx : SUBFRAME_LPC, xxxxx=order-1
-		bits = 0x20 | uint64(subHdr.Order-1)
+		bits = 0x20 | uint64(subHdr.Order-1) //nolint:gosec // value bounded by FLAC spec field width
 	}
 
 	if err := bw.WriteBits(bits, 6); err != nil {
@@ -130,7 +130,7 @@ func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 		}
 	}
 	// Unencoded constant value of the subblock, n = frame's bits-per-sample.
-	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
+	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 		return err
 	}
 
@@ -149,7 +149,7 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	}
 
 	for _, sample := range samples {
-		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 			return err
 		}
 	}
@@ -166,7 +166,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	samples := subframe.Samples
 	for i := range subframe.Order {
 		sample := samples[i]
-		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 			return err
 		}
 	}
@@ -197,7 +197,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	samples := subframe.Samples
 	for i := range subframe.Order {
 		sample := samples[i]
-		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
+		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 			return err
 		}
 	}
@@ -208,14 +208,14 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	}
 
 	// 5 bits: predictor coefficient shift needed in bits.
-	if err := bw.WriteBits(uint64(subframe.CoeffShift), 5); err != nil {
+	if err := bw.WriteBits(uint64(subframe.CoeffShift), 5); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 		return err
 	}
 
 	// Encode coefficients.
 	for _, coeff := range subframe.Coeffs {
 		// (prec) bits: Predictor coefficient.
-		if err := bw.WriteBits(uint64(coeff), uint8(subframe.CoeffPrec)); err != nil {
+		if err := bw.WriteBits(uint64(coeff), uint8(subframe.CoeffPrec)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 			return err
 		}
 	}
@@ -291,7 +291,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 	}
 
 	// 4 bits: Partition order.
-	if err := bw.WriteBits(uint64(riceSubframe.PartOrder), 4); err != nil {
+	if err := bw.WriteBits(uint64(riceSubframe.PartOrder), 4); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 		return err
 	}
 
@@ -305,17 +305,18 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 		partition := &riceSubframe.Partitions[i]
 		// (4 or 5) bits: Rice parameter.
 		param := partition.Param
-		if err := bw.WriteBits(uint64(param), uint8(paramSize)); err != nil {
+		if err := bw.WriteBits(uint64(param), uint8(paramSize)); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 			return err
 		}
 
 		// Determine the number of Rice encoded samples in the partition.
 		var nsamples int
-		if partOrder == 0 {
+		switch {
+		case partOrder == 0:
 			nsamples = subframe.NSamples - subframe.Order
-		} else if i != 0 {
+		case i != 0:
 			nsamples = subframe.NSamples / nparts
-		} else {
+		default:
 			nsamples = subframe.NSamples/nparts - subframe.Order
 		}
 
@@ -338,7 +339,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 				residual := residuals[curResidualIndex]
 				curResidualIndex++
 
-				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil {
+				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil { //nolint:gosec // extracting bytes from sample value, intentional
 					return err
 				}
 			}
@@ -377,7 +378,7 @@ func encodeRiceResidual(bw *bitio.Writer, k uint, residual int32) error {
 	}
 
 	// Write binary encoded least significant bits.
-	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil {
+	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil { //nolint:gosec // value bounded by FLAC spec field width
 		return err
 	}
 
@@ -417,7 +418,7 @@ func getLPCResiduals(subframe *frame.Subframe, coeffs []int32, shift int32) ([]i
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
 
-		residual := subframe.Samples[i] - int32(sample>>uint(shift))
+		residual := subframe.Samples[i] - int32(sample>>uint(shift)) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
 		residuals = append(residuals, residual)
 	}
 
