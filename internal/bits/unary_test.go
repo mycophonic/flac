@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/bits"
 )
 
 func TestUnary(t *testing.T) {

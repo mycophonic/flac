@@ -28,10 +28,10 @@ import (
 	"os"
 	"sort"
 
-	"github.com/mewkiz/flac/frame"
-	"github.com/mewkiz/flac/internal/bits"
-	"github.com/mewkiz/flac/internal/bufseekio"
-	"github.com/mewkiz/flac/meta"
+	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/bufseekio"
+	"github.com/mycophonic/flac/meta"
 )
 
 // A Stream contains the metadata blocks and provides access to the audio frames

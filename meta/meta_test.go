@@ -3,12 +3,12 @@ package meta_test
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 
-	"github.com/mewkiz/flac"
-	"github.com/mewkiz/flac/meta"
+	"github.com/mycophonic/flac"
+	"github.com/mycophonic/flac/meta"
 )
 
 var golden = []struct {
@@ -235,7 +235,7 @@ func TestParsePicture(t *testing.T) {
 	}
 	defer stream.Close()
 
-	want, err := ioutil.ReadFile("testdata/silence.jpg")
+	want, err := os.ReadFile("testdata/silence.jpg")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 )
 
@@ -61,7 +60,7 @@ func (block *Block) parseCueSheet() error {
 	}
 	lr := io.LimitReader(block.lr, 258)
 	zr := zeros{r: lr}
-	if _, err := io.Copy(ioutil.Discard, zr); err != nil {
+	if _, err := io.Copy(io.Discard, zr); err != nil {
 		return err
 	}
 
@@ -159,7 +158,7 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 	}
 	lr := io.LimitReader(block.lr, 13)
 	zr := zeros{r: lr}
-	_, err = io.Copy(ioutil.Discard, zr)
+	_, err = io.Copy(io.Discard, zr)
 	if err != nil {
 		return err
 	}
@@ -192,7 +191,7 @@ func (block *Block) parseTrack(cs *CueSheet, i int, uniq map[uint8]struct{}) err
 		// 3 bytes: reserved.
 		lr = io.LimitReader(block.lr, 3)
 		zr = zeros{r: lr}
-		_, err = io.Copy(ioutil.Discard, zr)
+		_, err = io.Copy(io.Discard, zr)
 		if err != nil {
 			return err
 		}

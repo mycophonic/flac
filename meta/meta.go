@@ -31,7 +31,6 @@ package meta
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 )
 
 // A Block contains the header and body of a metadata block.
@@ -42,7 +41,7 @@ type Block struct {
 	Header
 	// Metadata block body of type *StreamInfo, *Application, ... etc. Body is
 	// initially nil, and gets populated by a call to Block.Parse.
-	Body interface{}
+	Body any
 	// Underlying io.Reader; limited by the length of the block body.
 	lr io.Reader
 }
@@ -126,7 +125,7 @@ func (block *Block) Skip() error {
 		_, err := sr.Seek(0, io.SeekEnd)
 		return err
 	}
-	_, err := io.Copy(ioutil.Discard, block.lr)
+	_, err := io.Copy(io.Discard, block.lr)
 	return err
 }
 

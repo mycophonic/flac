@@ -6,11 +6,11 @@ import (
 	"math"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/flac/frame"
-	"github.com/mewkiz/flac/internal/hashutil/crc16"
-	"github.com/mewkiz/flac/internal/hashutil/crc8"
-	"github.com/mewkiz/flac/internal/utf8"
 	"github.com/mewkiz/pkg/errutil"
+	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/internal/hashutil/crc16"
+	"github.com/mycophonic/flac/internal/hashutil/crc8"
+	"github.com/mycophonic/flac/internal/utf8"
 )
 
 // --- [ Frame ] ---------------------------------------------------------------

@@ -33,8 +33,8 @@ import (
 	"io"
 	"log"
 
-	"github.com/mewkiz/flac/internal/bits"
-	"github.com/mewkiz/flac/internal/utf8"
+	"github.com/mycophonic/flac/internal/bits"
+	"github.com/mycophonic/flac/internal/utf8"
 )
 
 // A Frame contains the header and subframes of an audio frame. It holds the
@@ -162,7 +162,7 @@ func (frame *Frame) parseSubframes() error {
 
 		// Slice the contiguous sample buffer for this channel's subframe.
 		off := channel * blockSize
-		samples := frame.samplesBuf[off:off:off+blockSize]
+		samples := frame.samplesBuf[off : off : off+blockSize]
 
 		// Parse subframe into the pre-allocated struct.
 		if err := frame.parseSubframeInto(frame.br, bps, samples, frame.Subframes[channel]); err != nil {
