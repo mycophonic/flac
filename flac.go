@@ -557,7 +557,9 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 
 // searchFromStart searches for the given sample number using binary search and
 // returns the last seek point whose start sample is at or before sampleNum. If
-// sampleNum is before the first seek point, the first seek point is returned.
+// sampleNum is before the first seek point, a zero seek point (SampleNum: 0,
+// Offset: 0) is returned so the caller scans from the start of audio data and
+// finds the frame actually containing sampleNum.
 func (stream *Stream) searchFromStart(sampleNum uint64) (meta.SeekPoint, error) {
 	points := stream.seekTable.Points
 	if len(points) == 0 {
