@@ -9,6 +9,8 @@ import (
 )
 
 func TestNewReadSeekerSize(t *testing.T) {
+	t.Parallel()
+
 	buf := bytes.NewReader(make([]byte, 100))
 
 	// Test custom buffer size.
@@ -29,6 +31,8 @@ func TestNewReadSeekerSize(t *testing.T) {
 }
 
 func TestNewReadSeeker(t *testing.T) {
+	t.Parallel()
+
 	buf := bytes.NewReader(make([]byte, 100))
 	if rs := NewReadSeeker(buf); len(rs.buf) != defaultBufSize {
 		t.Fatalf("want %d got %d", defaultBufSize, len(rs.buf))
@@ -36,6 +40,8 @@ func TestNewReadSeeker(t *testing.T) {
 }
 
 func TestReadSeeker_Read(t *testing.T) {
+	t.Parallel()
+
 	data := make([]byte, 100)
 	for i := range data {
 		data[i] = byte(i)
@@ -182,6 +188,8 @@ func (r *readAndError) Seek(offset int64, whence int) (int64, error) {
 }
 
 func TestReadSeeker_Seek(t *testing.T) {
+	t.Parallel()
+
 	data := make([]byte, 100)
 	for i := range data {
 		data[i] = byte(i)

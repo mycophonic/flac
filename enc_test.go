@@ -142,8 +142,12 @@ var paths = []string{
 }
 
 func TestEncodeRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			if !exists(path) {
 				t.Skipf("path %q does not exist", path)
 			}
@@ -198,6 +202,8 @@ func TestEncodeRoundTrip(t *testing.T) {
 }
 
 func TestEncodeComment(t *testing.T) {
+	t.Parallel()
+
 	// Decode FLAC file.
 	const path = "meta/testdata/input-VA.flac"
 
@@ -264,8 +270,12 @@ func TestEncodeComment(t *testing.T) {
 }
 
 func TestEncodeAnalysisFixed(t *testing.T) {
+	t.Parallel()
+
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			if !exists(path) {
 				t.Skipf("path %q does not exist", path)
 			}

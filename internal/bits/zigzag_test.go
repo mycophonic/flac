@@ -7,6 +7,8 @@ import (
 )
 
 func TestDecodeZigZag(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    uint32
 		want int32
@@ -30,6 +32,8 @@ func TestDecodeZigZag(t *testing.T) {
 }
 
 func TestEncodeZigZag(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    int32
 		want uint32

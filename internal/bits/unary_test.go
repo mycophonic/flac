@@ -10,6 +10,8 @@ import (
 )
 
 func TestUnary(t *testing.T) {
+	t.Parallel()
+
 	buf := &bytes.Buffer{}
 	bw := bitio.NewWriter(buf)
 

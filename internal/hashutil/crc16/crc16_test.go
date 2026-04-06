@@ -51,6 +51,8 @@ var golden = []test{
 }
 
 func TestCrc16IBM(t *testing.T) {
+	t.Parallel()
+
 	for _, g := range golden {
 		h := crc16.NewIBM()
 		if _, err := io.WriteString(h, g.in); err != nil {

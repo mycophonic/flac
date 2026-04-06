@@ -7,6 +7,8 @@ import (
 )
 
 func TestIntN(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    uint64
 		n    uint

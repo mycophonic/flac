@@ -704,8 +704,12 @@ var golden = []struct {
 }
 
 func TestParseBlocks(t *testing.T) {
+	t.Parallel()
+
 	for _, g := range golden {
 		t.Run(g.path, func(t *testing.T) {
+			t.Parallel()
+
 			stream, err := flac.ParseFile(g.path)
 			if err != nil {
 				t.Fatal(err)
@@ -755,6 +759,8 @@ func TestParseBlocks(t *testing.T) {
 }
 
 func TestParsePicture(t *testing.T) {
+	t.Parallel()
+
 	stream, err := flac.ParseFile("testdata/silence.flac")
 	if err != nil {
 		t.Fatal(err)
@@ -782,6 +788,8 @@ func TestParsePicture(t *testing.T) {
 
 // TODO: better error verification than string-based comparisons.
 func TestMissingValue(t *testing.T) {
+	t.Parallel()
+
 	_, err := flac.ParseFile("testdata/missing-value.flac")
 	if err.Error() != `meta.Block.parseVorbisComment: unable to locate '=' in vector "title 2"` {
 		t.Fatal(err)
@@ -814,6 +822,8 @@ var MaliciousTooManyTags = []byte{
 }
 
 func TestVorbisCommentTooManyTags(t *testing.T) {
+	t.Parallel()
+
 	_, err := flac.Parse(bytes.NewReader(MaliciousTooManyTags))
 	if !errors.Is(err, meta.ErrDeclaredBlockTooBig) {
 		t.Errorf("expected to detect malicious number of tags; actual error=%q", err)
@@ -824,6 +834,8 @@ func TestVorbisCommentTooManyTags(t *testing.T) {
 // problems.
 // It is skipped by default as it may cause instability during test runs.
 func TestVorbisCommentTooManyTagsOOM(t *testing.T) {
+	t.Parallel()
+
 	t.Skip()
 
 	for range 255 {

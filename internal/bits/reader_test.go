@@ -14570,6 +14570,8 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadEOF(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		data []byte
 		n    uint

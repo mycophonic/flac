@@ -103,10 +103,14 @@ var golden = []struct {
 }
 
 func TestFrameHash(t *testing.T) {
+	t.Parallel()
+
 	var zeroHash [md5.Size]byte
 
 	for _, g := range golden {
 		t.Run(g.path, func(t *testing.T) {
+			t.Parallel()
+
 			stream, err := flac.Open(g.path)
 			if err != nil {
 				t.Fatal(err)
