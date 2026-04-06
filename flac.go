@@ -513,7 +513,10 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 		return 0, err
 	}
 
-	if _, err := stream.br.Seek(stream.dataStart+int64(point.Offset), io.SeekStart); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
+	if _, err := stream.br.Seek(
+		stream.dataStart+int64(point.Offset),
+		io.SeekStart,
+	); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
 		return 0, err
 	}
 

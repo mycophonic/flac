@@ -91,7 +91,7 @@ var paths = []string{
 	// (0b101)`. Notably, the computed md5 hash of the decoded audio samples
 	// is identical (MD5: 9fb66177d2f735d4b1f501a5af1320a3). Thus, ignore the
 	// test case.
-	//"testdata/flac-test-files/subset/27 - old format variable blocksize file created with Flake 0.11.flac",
+	// "testdata/flac-test-files/subset/27 - old format variable blocksize file created with Flake 0.11.flac",
 	"testdata/flac-test-files/subset/28 - high resolution audio, default settings.flac",
 	"testdata/flac-test-files/subset/29 - high resolution audio, blocksize 16384.flac",
 	"testdata/flac-test-files/subset/30 - high resolution audio, blocksize 13456.flac",

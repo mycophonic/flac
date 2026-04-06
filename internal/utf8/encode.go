@@ -68,7 +68,10 @@ func Encode(w io.Writer, x uint64) error {
 	// Store continuation bytes.
 	for i := l - 1; i >= 0; i-- {
 		bits := tx | (x>>uint(6*i))&maskx
-		if err := ioutilx.WriteByte(w, byte(bits)); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
+		if err := ioutilx.WriteByte(
+			w,
+			byte(bits),
+		); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
 			return err
 		}
 	}

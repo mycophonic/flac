@@ -46,7 +46,9 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 				nBytes++
 			}
 
-			if err = br.needBytes(int(nBytes)); err != nil { //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
+			if err = br.needBytes(
+				int(nBytes),
+			); err != nil { //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 				return 0, err
 			}
 
