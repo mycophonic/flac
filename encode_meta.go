@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/ioutilx"
 	"github.com/mycophonic/flac/meta"
 )
@@ -61,8 +60,24 @@ func encodeEmptyBlock(bw *bitio.Writer, typ meta.Type, last bool) error {
 
 // --- [ Metadata block header ] -----------------------------------------------
 
+// maxMetadataBlockLength is the largest value that fits in the FLAC metadata
+// block header's 24-bit length field (16 MiB - 1).
+const maxMetadataBlockLength = 0xFFFFFF
+
 // encodeBlockHeader encodes the metadata block header, writing to bw.
 func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
+	// FLAC spec: the metadata block header encodes Length in a 24-bit
+	// field, so the valid range is [0, 0xFFFFFF]. Reject out-of-range
+	// values explicitly; otherwise WriteBits would silently truncate to
+	// the low 24 bits and the encoded header would lie about how much
+	// body data follows.
+	if hdr.Length < 0 || hdr.Length > maxMetadataBlockLength {
+		return fmt.Errorf(
+			"metadata block length %d out of range [0, %d]",
+			hdr.Length, maxMetadataBlockLength,
+		)
+	}
+
 	// 1 bit: IsLast.
 	if err := bw.WriteBool(hdr.IsLast); err != nil {
 		return err
@@ -72,7 +87,7 @@ func encodeBlockHeader(bw *bitio.Writer, hdr *meta.Header) error {
 		return err
 	}
 	// 24 bits: Length.
-	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil { //nolint:gosec // value is non-negative by construction
+	if err := bw.WriteBits(uint64(hdr.Length), 24); err != nil {
 		return err
 	}
 
@@ -235,7 +250,11 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	// 32 bits: vendor length.
 	// TODO: verify that little-endian encoding is used; otherwise, switch to
 	// using bw.WriteBits.
-	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Vendor))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
+	if err := binary.Write(
+		bw,
+		binary.LittleEndian,
+		uint32(len(comment.Vendor)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+	); err != nil {
 		return err
 	}
 	// (vendor length) bits: Vendor.
@@ -244,7 +263,11 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	}
 	// Store tags.
 	// 32 bits: number of tags.
-	if err := binary.Write(bw, binary.LittleEndian, uint32(len(comment.Tags))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
+	if err := binary.Write(
+		bw,
+		binary.LittleEndian,
+		uint32(len(comment.Tags)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+	); err != nil {
 		return err
 	}
 
@@ -253,7 +276,11 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 		//    NAME=VALUE
 		buf := fmt.Appendf(nil, "%s=%s", tag[0], tag[1])
 		// 32 bits: vector length
-		if err := binary.Write(bw, binary.LittleEndian, uint32(len(buf))); err != nil { //nolint:gosec // value bounded by FLAC spec field width
+		if err := binary.Write(
+			bw,
+			binary.LittleEndian,
+			uint32(len(buf)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+		); err != nil {
 			return err
 		}
 		// (vector length): vector.

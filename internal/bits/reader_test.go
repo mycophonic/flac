@@ -4,7 +4,7 @@
 // which came with the following copyright notice:
 // Copyright 2013 Benoît Amiaux. All rights reserved.
 
-package bits
+package bits_test
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 	"io"
 	"math/rand"
 	"testing"
+
+	"github.com/mycophonic/flac/internal/bits"
 )
 
 func TestRead(t *testing.T) {
@@ -14541,7 +14543,7 @@ func TestRead(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := NewReader(bytes.NewReader(test.data))
+		r := bits.NewReader(bytes.NewReader(test.data))
 		if len(test.ns) != len(test.vals) {
 			panic("Number of reads does not match number of results")
 		}
@@ -14568,6 +14570,8 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadEOF(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		data []byte
 		n    uint
@@ -14582,7 +14586,7 @@ func TestReadEOF(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		r := NewReader(bytes.NewReader(test.data))
+		r := bits.NewReader(bytes.NewReader(test.data))
 		if _, err := r.Read(test.n); !errors.Is(err, test.err) {
 			t.Errorf("i=%d; Reading %d from %v, expected err=%s, got err=%s", i, test.n, test.data, test.err, err)
 		}
@@ -14605,14 +14609,14 @@ func benchmarkReads(b *testing.B, chunk, align int) {
 	b.Helper()
 
 	size := 1 << 12
-	buf, bits, _, last := prepareBenchmark(size, chunk, align)
+	buf, nbits, _, last := prepareBenchmark(size, chunk, align)
 	b.SetBytes(int64(len(buf)))
 	b.ResetTimer()
 
 	for range b.N {
-		r := NewReader(bytes.NewReader(buf))
+		r := bits.NewReader(bytes.NewReader(buf))
 		for j := range last {
-			if _, err := r.Read(bits[j]); err != nil {
+			if _, err := r.Read(nbits[j]); err != nil {
 				b.Error(err)
 
 				continue

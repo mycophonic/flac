@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 
@@ -149,6 +150,7 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 	return stream, err
 }
 
+//nolint:gochecknoglobals
 var (
 	// flacSignature marks the beginning of a FLAC stream.
 	flacSignature = []byte("fLaC")
@@ -513,7 +515,27 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 		return 0, err
 	}
 
-	if _, err := stream.br.Seek(stream.dataStart+int64(point.Offset), io.SeekStart); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
+	// Validate point.Offset before converting uint64 -> int64. The seek
+	// table can come from a malformed or malicious metadata block, where
+	// Offset may be larger than int64 can represent or large enough that
+	// dataStart + Offset overflows. Either case would silently land the
+	// reader at a garbage position.
+	if stream.dataStart < 0 {
+		return 0, fmt.Errorf("invalid negative dataStart %d", stream.dataStart)
+	}
+
+	maxOffset := uint64(math.MaxInt64) - uint64(stream.dataStart)
+	if point.Offset > maxOffset {
+		return 0, fmt.Errorf(
+			"seek point offset %d would overflow when added to dataStart %d",
+			point.Offset, stream.dataStart,
+		)
+	}
+
+	if _, err := stream.br.Seek(
+		stream.dataStart+int64(point.Offset), //nolint:gosec // point.Offset overflow validated above
+		io.SeekStart,
+	); err != nil {
 		return 0, err
 	}
 

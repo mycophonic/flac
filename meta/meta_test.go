@@ -704,59 +704,63 @@ var golden = []struct {
 }
 
 func TestParseBlocks(t *testing.T) {
+	t.Parallel()
+
 	for _, g := range golden {
-		stream, err := flac.ParseFile(g.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer stream.Close()
+		t.Run(g.path, func(t *testing.T) {
+			t.Parallel()
 
-		blocks := stream.Blocks
+			stream, err := flac.ParseFile(g.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
 
-		if len(blocks) != len(g.blocks) {
-			t.Errorf(
-				"path=%q: invalid number of metadata blocks; expected %d, got %d",
-				g.path,
-				len(g.blocks),
-				len(blocks),
-			)
+			blocks := stream.Blocks
 
-			continue
-		}
-
-		got := stream.Info
-
-		want := g.info
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("path=%q: metadata StreamInfo block bodies differ; expected %#v, got %#v", g.path, want, got)
-		}
-
-		for blockNum, got := range blocks {
-			want := g.blocks[blockNum]
-			if !reflect.DeepEqual(got.Header, want.Header) {
-				t.Errorf(
-					"path=%q, blockNum=%d: metadata block headers differ; expected %#v, got %#v",
-					g.path,
-					blockNum,
-					want.Header,
-					got.Header,
+			if len(blocks) != len(g.blocks) {
+				t.Fatalf(
+					"invalid number of metadata blocks; expected %d, got %d",
+					len(g.blocks),
+					len(blocks),
 				)
 			}
 
-			if !reflect.DeepEqual(got.Body, want.Body) {
+			if !reflect.DeepEqual(stream.Info, g.info) {
 				t.Errorf(
-					"path=%q, blockNum=%d: metadata block bodies differ; expected %#v, got %#v",
-					g.path,
-					blockNum,
-					want.Body,
-					got.Body,
+					"metadata StreamInfo block bodies differ; expected %#v, got %#v",
+					g.info,
+					stream.Info,
 				)
 			}
-		}
+
+			for blockNum, got := range blocks {
+				want := g.blocks[blockNum]
+				if !reflect.DeepEqual(got.Header, want.Header) {
+					t.Errorf(
+						"blockNum=%d: metadata block headers differ; expected %#v, got %#v",
+						blockNum,
+						want.Header,
+						got.Header,
+					)
+				}
+
+				if !reflect.DeepEqual(got.Body, want.Body) {
+					t.Errorf(
+						"blockNum=%d: metadata block bodies differ; expected %#v, got %#v",
+						blockNum,
+						want.Body,
+						got.Body,
+					)
+				}
+			}
+		})
 	}
 }
 
 func TestParsePicture(t *testing.T) {
+	t.Parallel()
+
 	stream, err := flac.ParseFile("testdata/silence.flac")
 	if err != nil {
 		t.Fatal(err)
@@ -784,6 +788,8 @@ func TestParsePicture(t *testing.T) {
 
 // TODO: better error verification than string-based comparisons.
 func TestMissingValue(t *testing.T) {
+	t.Parallel()
+
 	_, err := flac.ParseFile("testdata/missing-value.flac")
 	if err.Error() != `meta.Block.parseVorbisComment: unable to locate '=' in vector "title 2"` {
 		t.Fatal(err)
@@ -816,6 +822,8 @@ var MaliciousTooManyTags = []byte{
 }
 
 func TestVorbisCommentTooManyTags(t *testing.T) {
+	t.Parallel()
+
 	_, err := flac.Parse(bytes.NewReader(MaliciousTooManyTags))
 	if !errors.Is(err, meta.ErrDeclaredBlockTooBig) {
 		t.Errorf("expected to detect malicious number of tags; actual error=%q", err)
@@ -826,6 +834,8 @@ func TestVorbisCommentTooManyTags(t *testing.T) {
 // problems.
 // It is skipped by default as it may cause instability during test runs.
 func TestVorbisCommentTooManyTagsOOM(t *testing.T) {
+	t.Parallel()
+
 	t.Skip()
 
 	for range 255 {

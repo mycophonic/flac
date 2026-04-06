@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/bits"
 )
 
 func TestUnary(t *testing.T) {
+	t.Parallel()
+
 	buf := &bytes.Buffer{}
 	bw := bitio.NewWriter(buf)
 

@@ -1,8 +1,10 @@
-package crc16
+package crc16_test
 
 import (
 	"io"
 	"testing"
+
+	"github.com/mycophonic/flac/internal/hashutil/crc16"
 )
 
 type test struct {
@@ -49,8 +51,10 @@ var golden = []test{
 }
 
 func TestCrc16IBM(t *testing.T) {
+	t.Parallel()
+
 	for _, g := range golden {
-		h := NewIBM()
+		h := crc16.NewIBM()
 		if _, err := io.WriteString(h, g.in); err != nil {
 			t.Error(err)
 
@@ -66,7 +70,7 @@ func TestCrc16IBM(t *testing.T) {
 
 func BenchmarkNewIBM(b *testing.B) {
 	for range b.N {
-		NewIBM()
+		crc16.NewIBM()
 	}
 }
 
@@ -99,7 +103,7 @@ func benchmarkCrc16(b *testing.B, count int64) {
 		data[i] = byte(i)
 	}
 
-	h := NewIBM()
+	h := crc16.NewIBM()
 	in := make([]byte, 0, h.Size())
 
 	b.ResetTimer()

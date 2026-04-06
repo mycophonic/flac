@@ -1,10 +1,11 @@
-package flac
+package flac_test
 
 import (
 	"bytes"
 	"math"
 	"testing"
 
+	"github.com/mycophonic/flac"
 	"github.com/mycophonic/flac/frame"
 	"github.com/mycophonic/flac/meta"
 )
@@ -54,7 +55,7 @@ func BenchmarkEncodeSyntheticAudio(b *testing.B) {
 		buf := &bytes.Buffer{}
 
 		// Create encoder
-		enc, err := NewEncoder(buf, info)
+		enc, err := flac.NewEncoder(buf, info)
 		if err != nil {
 			b.Fatal(err)
 		}

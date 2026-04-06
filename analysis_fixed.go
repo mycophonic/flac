@@ -17,7 +17,10 @@ import (
 //  3. Pick the order with the overall fewest bits.
 //
 // Note: ignoring partition orders >0 and Rice2 for now.
-func analyzeFixed(sf *frame.Subframe, bps uint) {
+//
+// Returns the bit cost of the chosen prediction so callers can compare it
+// against alternative encodings without recomputing residuals.
+func analyzeFixed(sf *frame.Subframe, bps uint) int {
 	bestBits := int(^uint(0) >> 1) // max int
 	bestOrder := 0
 	bestK := uint(0)
@@ -48,6 +51,7 @@ func analyzeFixed(sf *frame.Subframe, bps uint) {
 	// Note: We do NOT mutate sf.Samples. The encoder expects original samples
 	// because it recomputes residuals internally. The metadata we filled in is
 	// enough for encodeFixedSamples to reproduce the exact same residuals.
+	return bestBits
 }
 
 // computeFixedResiduals returns the residual signal for a given fixed predictor
@@ -186,10 +190,9 @@ func analyzeSubframe(sf *frame.Subframe, bps uint) {
 	verbatimBits := 8 + n*int(bps)
 
 	// --- Fixed predictor: reuse existing helper to find best order/k.
-	analyzeFixed(sf, bps) // fills Order, RiceSubframe, etc.
-	// Cost of that choice
-	fixedResiduals := computeFixedResiduals(samples, sf.Order)
-	fixedBits := costFixed(sf.Order, bps, fixedResiduals, sf.RiceSubframe.Partitions[0].Param)
+	// analyzeFixed fills Order, RiceSubframe, etc. and returns the
+	// bit-cost of the chosen prediction so we don't recompute residuals.
+	fixedBits := analyzeFixed(sf, bps)
 
 	// Choose the smallest.
 	switch {

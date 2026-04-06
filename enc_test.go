@@ -91,7 +91,7 @@ var paths = []string{
 	// (0b101)`. Notably, the computed md5 hash of the decoded audio samples
 	// is identical (MD5: 9fb66177d2f735d4b1f501a5af1320a3). Thus, ignore the
 	// test case.
-	//"testdata/flac-test-files/subset/27 - old format variable blocksize file created with Flake 0.11.flac",
+	// "testdata/flac-test-files/subset/27 - old format variable blocksize file created with Flake 0.11.flac",
 	"testdata/flac-test-files/subset/28 - high resolution audio, default settings.flac",
 	"testdata/flac-test-files/subset/29 - high resolution audio, blocksize 16384.flac",
 	"testdata/flac-test-files/subset/30 - high resolution audio, blocksize 13456.flac",
@@ -142,8 +142,12 @@ var paths = []string{
 }
 
 func TestEncodeRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			if !exists(path) {
 				t.Skipf("path %q does not exist", path)
 			}
@@ -198,6 +202,8 @@ func TestEncodeRoundTrip(t *testing.T) {
 }
 
 func TestEncodeComment(t *testing.T) {
+	t.Parallel()
+
 	// Decode FLAC file.
 	const path = "meta/testdata/input-VA.flac"
 
@@ -264,8 +270,12 @@ func TestEncodeComment(t *testing.T) {
 }
 
 func TestEncodeAnalysisFixed(t *testing.T) {
+	t.Parallel()
+
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			if !exists(path) {
 				t.Skipf("path %q does not exist", path)
 			}

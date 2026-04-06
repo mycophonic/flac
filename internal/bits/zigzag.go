@@ -33,5 +33,8 @@ func DecodeZigZag(x uint32) int32 {
 //
 // ref: https://developers.google.com/protocol-buffers/docs/encoding
 func EncodeZigZag(x int32) uint32 {
-	return uint32((x << 1) ^ (x >> 31)) //nolint:gosec // extracting bytes from sample value, intentional
+	// ZigZag encoding maps signed int32 to unsigned uint32 via bit-shifts
+	// and XOR; the int32→uint32 cast is an intentional bit reinterpretation,
+	// not a value range conversion. No external/untrusted input is involved.
+	return uint32((x << 1) ^ (x >> 31)) //nolint:gosec // intentional ZigZag bit reinterpretation
 }

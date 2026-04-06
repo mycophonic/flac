@@ -6,9 +6,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/icza/bitio"
-
 	"github.com/mycophonic/flac/frame"
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/internal/hashutil/crc16"
 	"github.com/mycophonic/flac/internal/hashutil/crc8"
 	"github.com/mycophonic/flac/internal/utf8"
@@ -37,6 +36,25 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 		}
 	}
 
+	// FLAC spec: block size is 1..65535 samples. Validate before any
+	// uint16 conversion below, otherwise stream stats (blockSizeMin/Max,
+	// nsamples) get poisoned by truncation/wrap-around.
+	if nsamplesPerChannel < 1 || nsamplesPerChannel > math.MaxUint16 {
+		return fmt.Errorf(
+			"invalid block size %d; must be in range [1, %d]",
+			nsamplesPerChannel, math.MaxUint16,
+		)
+	}
+
+	// The frame header's BlockSize field must match the actual sample count;
+	// otherwise the encoded header would lie about how much data follows.
+	if int(f.BlockSize) != nsamplesPerChannel {
+		return fmt.Errorf(
+			"header BlockSize %d does not match subframe sample count %d",
+			f.BlockSize, nsamplesPerChannel,
+		)
+	}
+
 	if nchannels != f.Channels.Count() {
 		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
 	}
@@ -51,12 +69,12 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	if f.HasFixedBlockSize {
 		enc.curNum++
 	} else {
-		enc.curNum += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+		enc.curNum += uint64(nsamplesPerChannel)
 	}
 
-	enc.nsamples += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+	enc.nsamples += uint64(nsamplesPerChannel)
 
-	blockSize := uint16(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+	blockSize := uint16(nsamplesPerChannel)
 	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
 		enc.blockSizeMin = blockSize
 	}
@@ -122,11 +140,8 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// everything before the crc, back to and including the frame header sync
 	// code.
 	crc := h.Sum16()
-	if err := binary.Write(enc.w, binary.BigEndian, crc); err != nil {
-		return err
-	}
 
-	return nil
+	return binary.Write(enc.w, binary.BigEndian, crc)
 }
 
 // --- [ Frame header ] --------------------------------------------------------

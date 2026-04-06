@@ -5,8 +5,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/icza/bitio"
-
+	"github.com/mycophonic/flac/internal/bitio"
 	"github.com/mycophonic/flac/meta"
 )
 
@@ -46,7 +45,7 @@ func NewEncoder(w io.Writer, info *meta.StreamInfo, blocks ...*meta.Block) (*Enc
 		},
 		w:               w,
 		md5sum:          md5.New(), //nolint:gosec // FLAC spec mandates MD5 for sample integrity, not used as a security primitive
-		AnalysisEnabled: true, // enable prediction analysis by default.
+		AnalysisEnabled: true,      // enable prediction analysis by default.
 	}
 
 	bw := bitio.NewWriter(w)

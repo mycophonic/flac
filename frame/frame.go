@@ -253,17 +253,17 @@ func (frame *Frame) Hash(md5sum hash.Hash) {
 				buf[0] = uint8(sample) //nolint:gosec // extracting bytes from sample value, intentional
 				md5sum.Write(buf[:1])
 			case 9 <= bps && bps <= 16:
-				buf[0] = uint8(sample) //nolint:gosec // extracting bytes from sample value, intentional
+				buf[0] = uint8(sample)      //nolint:gosec // extracting bytes from sample value, intentional
 				buf[1] = uint8(sample >> 8) //nolint:gosec // extracting bytes from sample value, intentional
 				md5sum.Write(buf[:2])
 			case 17 <= bps && bps <= 24:
-				buf[0] = uint8(sample) //nolint:gosec // extracting bytes from sample value, intentional
-				buf[1] = uint8(sample >> 8) //nolint:gosec // extracting bytes from sample value, intentional
+				buf[0] = uint8(sample)       //nolint:gosec // extracting bytes from sample value, intentional
+				buf[1] = uint8(sample >> 8)  //nolint:gosec // extracting bytes from sample value, intentional
 				buf[2] = uint8(sample >> 16) //nolint:gosec // extracting bytes from sample value, intentional
 				md5sum.Write(buf[:3])
 			case 25 <= bps && bps <= 32:
-				buf[0] = uint8(sample) //nolint:gosec // extracting bytes from sample value, intentional
-				buf[1] = uint8(sample >> 8) //nolint:gosec // extracting bytes from sample value, intentional
+				buf[0] = uint8(sample)       //nolint:gosec // extracting bytes from sample value, intentional
+				buf[1] = uint8(sample >> 8)  //nolint:gosec // extracting bytes from sample value, intentional
 				buf[2] = uint8(sample >> 16) //nolint:gosec // extracting bytes from sample value, intentional
 				buf[3] = uint8(sample >> 24) //nolint:gosec // extracting bytes from sample value, intentional
 				md5sum.Write(buf[:4])
@@ -503,7 +503,10 @@ func (frame *Frame) scanToSync() error {
 
 		// Reset CRC checksums to start from this frame and seed with the
 		// two sync bytes so the header CRC covers the complete frame header.
-		syncBytes := [2]byte{0xFF, byte(next)} //nolint:gosec // value bounded by bit-field width just read from the stream
+		syncBytes := [2]byte{
+			0xFF,
+			byte(next), //nolint:gosec // value bounded by bit-field width just read from the stream
+		}
 
 		br.EnableCRC16()
 		br.EnableCRC8()
@@ -630,7 +633,15 @@ func (frame *Frame) parseBlockSize(br *bits.Reader, blockSize uint64) error {
 			return unexpected(err)
 		}
 
-		frame.BlockSize = uint16(x + 1) //nolint:gosec // value bounded by bit-field width just read from the stream
+		// FLAC block size is in [1, 65535]. The on-wire encoding stores
+		// (blocksize - 1), so x = 0xFFFF would mean blocksize = 65536,
+		// which is out of spec. Reject explicitly to avoid uint16 wrap
+		// to 0.
+		if x == 0xFFFF {
+			return errors.New("frame.Frame.parseHeader: invalid block size 65536 (out of FLAC spec range)")
+		}
+
+		frame.BlockSize = uint16(x + 1) //nolint:gosec // x validated to be < 0xFFFF, so x+1 fits in uint16
 	default:
 		//    1000-1111: 256 * 2^(n-8) samples.
 		frame.BlockSize = 256 * (1 << (n - 8))
@@ -827,8 +838,12 @@ func (frame *Frame) Correlate() {
 			//
 			// ref: Data Compression: The Complete Reference (ch. 7, Decorrelation)
 			m |= s & 1
-			mid[i] = int32((m + s) >> 1) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
-			side[i] = int32((m - s) >> 1) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
+			mid[i] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+				(m + s) >> 1,
+			)
+			side[i] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+				(m - s) >> 1,
+			)
 		}
 	}
 }

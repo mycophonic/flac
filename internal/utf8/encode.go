@@ -67,8 +67,14 @@ func Encode(w io.Writer, x uint64) error {
 
 	// Store continuation bytes.
 	for i := l - 1; i >= 0; i-- {
+		// bits = tx (0x80) | (6 bits of x); the OR yields a value in
+		// [0x80, 0xBF], so byte(bits) is exact by construction. This is
+		// the encoder side, not a read from any external stream.
 		bits := tx | (x>>uint(6*i))&maskx
-		if err := ioutilx.WriteByte(w, byte(bits)); err != nil { //nolint:gosec // value bounded by bit-field width just read from the stream
+		if err := ioutilx.WriteByte(
+			w,
+			byte(bits), //nolint:gosec // bits = tx (0x80) | 6-bit payload, so the value is in [0x80, 0xBF]
+		); err != nil {
 			return err
 		}
 	}

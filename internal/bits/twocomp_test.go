@@ -1,8 +1,14 @@
-package bits
+package bits_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mycophonic/flac/internal/bits"
+)
 
 func TestIntN(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    uint64
 		n    uint
@@ -18,7 +24,7 @@ func TestIntN(t *testing.T) {
 		{x: 0b100, n: 3, want: -4},
 	}
 	for _, g := range golden {
-		got := IntN(g.x, g.n)
+		got := bits.IntN(g.x, g.n)
 		if g.want != got {
 			t.Errorf("result mismatch of IntN(x=0b%03b, n=%d); expected %d, got %d", g.x, g.n, g.want, got)
 

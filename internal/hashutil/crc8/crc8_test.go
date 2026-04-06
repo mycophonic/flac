@@ -51,6 +51,8 @@ var golden = []test{
 }
 
 func TestCrc8ATM(t *testing.T) {
+	t.Parallel()
+
 	for _, g := range golden {
 		h := crc8.NewATM()
 		if _, err := io.WriteString(h, g.in); err != nil {

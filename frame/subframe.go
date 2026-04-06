@@ -485,7 +485,9 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 		return unexpected(err)
 	}
 
-	residualCodingMethod := ResidualCodingMethod(x) //nolint:gosec // value bounded by bit-field width just read from the stream
+	residualCodingMethod := ResidualCodingMethod( //nolint:gosec // value bounded by bit-field width just read from the stream
+		x,
+	)
 	subframe.ResidualCodingMethod = residualCodingMethod
 	// The 2 bits are used to specify the residual coding method as follows:
 	//    00: Rice coding with a 4-bit Rice parameter.
@@ -575,6 +577,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 
 		// Determine the number of Rice encoded samples in the partition.
 		var nsamples int
+
 		switch {
 		case partOrder == 0:
 			nsamples = subframe.NSamples - subframe.Order
@@ -608,7 +611,9 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 				// complement.  For example, when a partition is escaped and each
 				// residual sample is stored with 3 bits, the number -1 is
 				// represented as 0b111.
-				subframe.Samples[sIdx] = int32(bits.IntN(sample, n)) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
+				subframe.Samples[sIdx] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+					bits.IntN(sample, n),
+				)
 				sIdx++
 			}
 
@@ -660,7 +665,9 @@ func (subframe *Subframe) decodeLPC(coeffs []int32, shift int32) error {
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
 
-		subframe.Samples[i] += int32(sample >> uint(shift)) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
+		subframe.Samples[i] += int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+			sample >> uint(shift),
+		)
 	}
 
 	return nil

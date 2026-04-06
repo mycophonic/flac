@@ -11,18 +11,15 @@ import (
 )
 
 func TestSkipID3v2(t *testing.T) {
+	t.Parallel()
+
 	if _, err := flac.ParseFile("testdata/id3.flac"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestSeek(t *testing.T) {
-	f, err := os.Open("testdata/172960.flac")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer f.Close()
+	t.Parallel()
 
 	// Seek Table:
 	// {SampleNum:0 Offset:8283 NSamples:4096}
@@ -56,13 +53,24 @@ func TestSeek(t *testing.T) {
 		{seek: 40960 + 2723, expected: 0, err: "unable to seek to sample number 43683"}, // one after last sample
 	}
 
-	stream, err := flac.NewSeek(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	for i, pos := range testPos {
 		t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
+			t.Parallel()
+
+			// Each subtest needs its own file/stream because Stream
+			// has mutable position/buffer state and is not safe for
+			// concurrent use.
+			f, err := os.Open("testdata/172960.flac")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			stream, err := flac.NewSeek(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			p, err := stream.Seek(pos.seek)
 			if err != nil {
 				if err.Error() != pos.err {
@@ -83,6 +91,8 @@ func TestSeek(t *testing.T) {
 }
 
 func TestDecode(t *testing.T) {
+	t.Parallel()
+
 	paths := []string{
 		"meta/testdata/input-SCPAP.flac",
 		"meta/testdata/input-SCVA.flac",
@@ -181,6 +191,8 @@ func TestDecode(t *testing.T) {
 	for _, path := range paths {
 		for k, f := range funcs {
 			t.Run(fmt.Sprintf("%s/%s", k, path), func(t *testing.T) {
+				t.Parallel()
+
 				file, err := os.Open(path)
 				if err != nil {
 					t.Fatal(err)

@@ -1,10 +1,14 @@
-package bits
+package bits_test
 
 import (
 	"testing"
+
+	"github.com/mycophonic/flac/internal/bits"
 )
 
 func TestDecodeZigZag(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    uint32
 		want int32
@@ -18,7 +22,7 @@ func TestDecodeZigZag(t *testing.T) {
 		{x: 6, want: 3},
 	}
 	for _, g := range golden {
-		got := DecodeZigZag(g.x)
+		got := bits.DecodeZigZag(g.x)
 		if g.want != got {
 			t.Errorf("result mismatch of DecodeZigZag(x=%d); expected %d, got %d", g.x, g.want, got)
 
@@ -28,6 +32,8 @@ func TestDecodeZigZag(t *testing.T) {
 }
 
 func TestEncodeZigZag(t *testing.T) {
+	t.Parallel()
+
 	golden := []struct {
 		x    int32
 		want uint32
@@ -41,7 +47,7 @@ func TestEncodeZigZag(t *testing.T) {
 		{x: 3, want: 6},
 	}
 	for _, g := range golden {
-		got := EncodeZigZag(g.x)
+		got := bits.EncodeZigZag(g.x)
 		if g.want != got {
 			t.Errorf("result mismatch of EncodeZigZag(x=%d); expected %d, got %d", g.x, g.want, got)
 
