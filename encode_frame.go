@@ -2,11 +2,11 @@ package flac
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/pkg/errutil"
 	"github.com/mycophonic/flac/frame"
 	"github.com/mycophonic/flac/internal/hashutil/crc16"
 	"github.com/mycophonic/flac/internal/hashutil/crc8"
@@ -21,16 +21,16 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// Sanity checks.
 	nchannels := int(enc.Info.NChannels)
 	if nchannels != len(f.Subframes) {
-		return errutil.Newf("subframe and channel count mismatch; expected %d, got %d", nchannels, len(f.Subframes))
+		return fmt.Errorf("subframe and channel count mismatch; expected %d, got %d", nchannels, len(f.Subframes))
 	}
 	nsamplesPerChannel := f.Subframes[0].NSamples
 	for i, subframe := range f.Subframes {
 		if nsamplesPerChannel != len(subframe.Samples) {
-			return errutil.Newf("invalid number of samples in channel %d; expected %d, got %d", i, nsamplesPerChannel, len(subframe.Samples))
+			return fmt.Errorf("invalid number of samples in channel %d; expected %d, got %d", i, nsamplesPerChannel, len(subframe.Samples))
 		}
 	}
 	if nchannels != f.Channels.Count() {
-		return errutil.Newf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
+		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
 	}
 
 	// Create a new CRC-16 hash writer which adds the data from all write
@@ -58,7 +58,7 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// Add unencoded audio samples to running MD5 hash.
 	f.Hash(enc.md5sum)
 	if err := enc.encodeFrameHeader(hw, f.Header); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Inter-channel decorrelation of subframe samples.
@@ -95,14 +95,14 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 		}
 
 		if err := encodeSubframe(bw, f.Header, subframe, bps); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
 	// Zero-padding to byte alignment.
 	// Flush pending writes to subframe.
 	if _, err := bw.Align(); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// CRC-16 (polynomial = x^16 + x^15 + x^2 + x^0, initialized with 0) of
@@ -110,7 +110,7 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// code.
 	crc := h.Sum16()
 	if err := binary.Write(enc.w, binary.BigEndian, crc); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	return nil
@@ -131,46 +131,46 @@ func (enc *Encoder) encodeFrameHeader(w io.Writer, hdr frame.Header) error {
 
 	//  Sync code: 11111111111110
 	if err := bw.WriteBits(0x3FFE, 14); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Reserved: 0
 	if err := bw.WriteBits(0x0, 1); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Blocking strategy:
 	//    0 : fixed-blocksize stream; frame header encodes the frame number
 	//    1 : variable-blocksize stream; frame header encodes the sample number
 	if err := bw.WriteBool(!hdr.HasFixedBlockSize); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode block size.
 	nblockSizeSuffixBits, err := encodeFrameHeaderBlockSize(bw, hdr.BlockSize)
 	if err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode sample rate.
 	sampleRateSuffixBits, nsampleRateSuffixBits, err := encodeFrameHeaderSampleRate(bw, hdr.SampleRate)
 	if err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode channels assignment.
 	if err := encodeFrameHeaderChannels(bw, hdr.Channels); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode bits-per-sample.
 	if err := encodeFrameHeaderBitsPerSample(bw, hdr.BitsPerSample); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Reserved: 0
 	if err := bw.WriteBits(0x0, 1); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	//    if (variable blocksize)
@@ -178,7 +178,7 @@ func (enc *Encoder) encodeFrameHeader(w io.Writer, hdr frame.Header) error {
 	//    else
 	//       <8-48>:"UTF-8" coded frame number (decoded number is 31 bits)
 	if err := utf8.Encode(bw, hdr.Num); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Write block size after the frame header (used for uncommon block sizes).
@@ -186,27 +186,27 @@ func (enc *Encoder) encodeFrameHeader(w io.Writer, hdr frame.Header) error {
 		// 0110 : get 8 bit (blocksize-1) from end of header
 		// 0111 : get 16 bit (blocksize-1) from end of header
 		if err := bw.WriteBits(uint64(hdr.BlockSize-1), nblockSizeSuffixBits); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
 	// Write sample rate after the frame header (used for uncommon sample rates).
 	if nsampleRateSuffixBits > 0 {
 		if err := bw.WriteBits(sampleRateSuffixBits, nsampleRateSuffixBits); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
 	// Flush pending writes to frame header.
 	if _, err := bw.Align(); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// CRC-8 (polynomial = x^8 + x^2 + x^1 + x^0, initialized with 0) of
 	// everything before the crc, including the sync code.
 	crc := h.Sum8()
 	if err := binary.Write(w, binary.BigEndian, crc); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	return nil
@@ -248,7 +248,7 @@ func encodeFrameHeaderBlockSize(bw *bitio.Writer, blockSize uint16) (nblockSizeS
 		}
 	}
 	if err := bw.WriteBits(bits, 4); err != nil {
-		return 0, errutil.Err(err)
+		return 0, err
 	}
 	return nblockSizeSuffixBits, nil
 }
@@ -332,11 +332,11 @@ func encodeFrameHeaderSampleRate(bw *bitio.Writer, sampleRate uint32) (sampleRat
 			sampleRateSuffixBits = uint64(sampleRate / 10)
 			nsampleRateSuffixBits = 16
 		default:
-			return 0, 0, errutil.Newf("unable to encode sample rate %v", sampleRate)
+			return 0, 0, fmt.Errorf("unable to encode sample rate %v", sampleRate)
 		}
 	}
 	if err := bw.WriteBits(bits, 4); err != nil {
-		return 0, 0, errutil.Err(err)
+		return 0, 0, err
 	}
 	return sampleRateSuffixBits, nsampleRateSuffixBits, nil
 }
@@ -385,10 +385,10 @@ func encodeFrameHeaderChannels(bw *bitio.Writer, channels frame.Channels) error 
 		// 1010 : mid/side stereo: channel 0 is the mid(average) channel, channel 1 is the side(difference) channel
 		bits = 0xA
 	default:
-		return errutil.Newf("support for channel assignment %v not yet implemented", channels)
+		return fmt.Errorf("support for channel assignment %v not yet implemented", channels)
 	}
 	if err := bw.WriteBits(bits, 4); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }
@@ -431,10 +431,10 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 		// 111 : 32 bits per sample (RFC 9639)
 		bits = 0x7
 	default:
-		return errutil.Newf("support for sample size %v not yet implemented", bps)
+		return fmt.Errorf("support for sample size %v not yet implemented", bps)
 	}
 	if err := bw.WriteBits(bits, 3); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }

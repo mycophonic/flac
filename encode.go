@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/pkg/errutil"
 	"github.com/mycophonic/flac/meta"
 )
 
@@ -50,21 +49,21 @@ func NewEncoder(w io.Writer, info *meta.StreamInfo, blocks ...*meta.Block) (*Enc
 
 	bw := bitio.NewWriter(w)
 	if _, err := bw.Write(flacSignature); err != nil {
-		return nil, errutil.Err(err)
+		return nil, err
 	}
 	// Encode metadata blocks.
 	// TODO: consider using bufio.NewWriter.
 	if err := encodeStreamInfo(bw, info, len(blocks) == 0); err != nil {
-		return nil, errutil.Err(err)
+		return nil, err
 	}
 	for i, block := range blocks {
 		if err := encodeBlock(bw, block, i == len(blocks)-1); err != nil {
-			return nil, errutil.Err(err)
+			return nil, err
 		}
 	}
 	// Flush pending writes of metadata blocks.
 	if _, err := bw.Align(); err != nil {
-		return nil, errutil.Err(err)
+		return nil, err
 	}
 	// Return encoder to be used for encoding audio samples.
 	return enc, nil
@@ -80,7 +79,7 @@ func (enc *Encoder) Close() error {
 	// Update StreamInfo metadata block.
 	if ws, ok := enc.w.(io.WriteSeeker); ok {
 		if _, err := ws.Seek(int64(len(flacSignature)), io.SeekStart); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 		// Update minimum and maximum block size (in samples) of FLAC stream.
 		enc.Info.BlockSizeMin = enc.blockSizeMin
@@ -98,10 +97,10 @@ func (enc *Encoder) Close() error {
 		bw := bitio.NewWriter(ws)
 		// Write updated StreamInfo metadata block to output stream.
 		if err := encodeStreamInfo(bw, enc.Info, len(enc.Blocks) == 0); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 		if _, err := bw.Align(); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 	if closer, ok := enc.w.(io.Closer); ok {
