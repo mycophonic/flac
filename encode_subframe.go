@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/icza/bitio"
-	"github.com/mewkiz/pkg/errutil"
 	"github.com/mycophonic/flac/frame"
 	iobits "github.com/mycophonic/flac/internal/bits"
 )
@@ -15,7 +14,7 @@ import (
 func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe, bps uint) error {
 	// Encode subframe header.
 	if err := encodeSubframeHeader(bw, subframe.SubHeader); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Adjust bps of subframe for wasted bits-per-sample.
@@ -38,22 +37,22 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 	switch subframe.Pred {
 	case frame.PredConstant:
 		if err := encodeConstantSamples(bw, hdr, subframe, bps); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	case frame.PredVerbatim:
 		if err := encodeVerbatimSamples(bw, hdr, subframe, bps); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	case frame.PredFixed:
 		if err := encodeFixedSamples(bw, hdr, subframe, bps); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	case frame.PredFIR:
 		if err := encodeFIRSamples(bw, hdr, subframe, bps); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	default:
-		return errutil.Newf("support for prediction method %v not yet implemented", subframe.Pred)
+		return fmt.Errorf("support for prediction method %v not yet implemented", subframe.Pred)
 	}
 	return nil
 }
@@ -64,7 +63,7 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 	// Zero bit padding, to prevent sync-fooling string of 1s.
 	if err := bw.WriteBits(0x0, 1); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Subframe type:
@@ -91,7 +90,7 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 		bits = 0x20 | uint64(subHdr.Order-1)
 	}
 	if err := bw.WriteBits(bits, 6); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// <1+k> 'Wasted bits-per-sample' flag:
@@ -100,11 +99,11 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 	//     1 : k wasted bits-per-sample in source subblock, k-1 follows, unary coded; e.g. k=3 => 001 follows, k=7 => 0000001 follows.
 	hasWastedBits := subHdr.Wasted > 0
 	if err := bw.WriteBool(hasWastedBits); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	if hasWastedBits {
 		if err := iobits.WriteUnary(bw, uint64(subHdr.Wasted-1)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 	return nil
@@ -118,12 +117,12 @@ func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	sample := samples[0]
 	for _, s := range samples[1:] {
 		if sample != s {
-			return errutil.Newf("constant sample mismatch; expected %v, got %v", sample, s)
+			return fmt.Errorf("constant sample mismatch; expected %v, got %v", sample, s)
 		}
 	}
 	// Unencoded constant value of the subblock, n = frame's bits-per-sample.
 	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }
@@ -136,11 +135,11 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	// Unencoded subblock; n = frame's bits-per-sample, i = frame's blocksize.
 	samples := subframe.Samples
 	if int(hdr.BlockSize) != len(samples) {
-		return errutil.Newf("block size and sample count mismatch; expected %d, got %d", hdr.BlockSize, len(samples))
+		return fmt.Errorf("block size and sample count mismatch; expected %d, got %d", hdr.BlockSize, len(samples))
 	}
 	for _, sample := range samples {
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 	return nil
@@ -156,7 +155,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	for i := 0; i < subframe.Order; i++ {
 		sample := samples[i]
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
@@ -165,12 +164,12 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	const shift = 0
 	residuals, err := getLPCResiduals(subframe, frame.FixedCoeffs[subframe.Order], shift)
 	if err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode subframe residuals.
 	if err := encodeResiduals(bw, subframe, residuals); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }
@@ -185,25 +184,25 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	for i := 0; i < subframe.Order; i++ {
 		sample := samples[i]
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
 	// 4 bits: (coefficients' precision in bits) - 1.
 	if err := bw.WriteBits(uint64(subframe.CoeffPrec-1), 4); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// 5 bits: predictor coefficient shift needed in bits.
 	if err := bw.WriteBits(uint64(subframe.CoeffShift), 5); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode coefficients.
 	for _, coeff := range subframe.Coeffs {
 		// (prec) bits: Predictor coefficient.
 		if err := bw.WriteBits(uint64(coeff), uint8(subframe.CoeffPrec)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 
@@ -211,12 +210,12 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	// samples and LPC predicted audio samples.
 	residuals, err := getLPCResiduals(subframe, subframe.Coeffs, subframe.CoeffShift)
 	if err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Encode subframe residuals.
 	if err := encodeResiduals(bw, subframe, residuals); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }
@@ -228,7 +227,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 func encodeResiduals(bw *bitio.Writer, subframe *frame.Subframe, residuals []int32) error {
 	// 2 bits: Residual coding method.
 	if err := bw.WriteBits(uint64(subframe.ResidualCodingMethod), 2); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	// The 2 bits are used to specify the residual coding method as follows:
 	//    00: Rice coding with a 4-bit Rice parameter.
@@ -254,7 +253,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 	// 4 bits: Partition order.
 	riceSubframe := subframe.RiceSubframe
 	if err := bw.WriteBits(uint64(riceSubframe.PartOrder), 4); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Parse Rice partitions; in total 2^partOrder partitions.
@@ -269,7 +268,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 		// (4 or 5) bits: Rice parameter.
 		param := partition.Param
 		if err := bw.WriteBits(uint64(param), uint8(paramSize)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 
 		// Determine the number of Rice encoded samples in the partition.
@@ -286,7 +285,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 			// 1111 or 11111: Escape code, meaning the partition is in unencoded
 			// binary form using n bits per sample; n follows as a 5-bit number.
 			if err := bw.WriteBits(uint64(partition.EscapedBitsPerSample), 5); err != nil {
-				return errutil.Err(err)
+				return err
 			}
 			for j := 0; j < nsamples; j++ {
 				// ref: https://datatracker.ietf.org/doc/draft-ietf-cellar-flac/
@@ -300,7 +299,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 				residual := residuals[curResidualIndex]
 				curResidualIndex++
 				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil {
-					return errutil.Err(err)
+					return err
 				}
 			}
 			continue
@@ -311,7 +310,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 			residual := residuals[curResidualIndex]
 			curResidualIndex++
 			if err := encodeRiceResidual(bw, param, residual); err != nil {
-				return errutil.Err(err)
+				return err
 			}
 		}
 	}
@@ -332,12 +331,12 @@ func encodeRiceResidual(bw *bitio.Writer, k uint, residual int32) error {
 
 	// Write unary encoded most significant bits.
 	if err := iobits.WriteUnary(bw, uint64(high)); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Write binary encoded least significant bits.
 	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 	return nil
 }

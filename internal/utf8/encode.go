@@ -3,7 +3,6 @@ package utf8
 import (
 	"io"
 
-	"github.com/mewkiz/pkg/errutil"
 	"github.com/mycophonic/flac/internal/ioutilx"
 )
 
@@ -12,7 +11,7 @@ func Encode(w io.Writer, x uint64) error {
 	// 1-byte, 7-bit sequence?
 	if x <= rune1Max {
 		if err := ioutilx.WriteByte(w, byte(x)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 		return nil
 	}
@@ -58,14 +57,14 @@ func Encode(w io.Writer, x uint64) error {
 	}
 	// Store bits of c0.
 	if err := ioutilx.WriteByte(w, byte(bits)); err != nil {
-		return errutil.Err(err)
+		return err
 	}
 
 	// Store continuation bytes.
 	for i := l - 1; i >= 0; i-- {
 		bits := tx | (x>>uint(6*i))&maskx
 		if err := ioutilx.WriteByte(w, byte(bits)); err != nil {
-			return errutil.Err(err)
+			return err
 		}
 	}
 	return nil

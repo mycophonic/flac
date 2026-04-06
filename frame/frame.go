@@ -105,6 +105,14 @@ func ParseInto(br *bits.Reader, samplesBuf []int32, subframes []*Subframe) (*Fra
 	return frame, err
 }
 
+// ParseReuse parses subframes using pre-allocated buffers on a frame whose
+// header has already been parsed by New. This allows the caller to inspect or
+// modify header fields (e.g. resolve BitsPerSample from StreamInfo) between
+// header parsing and subframe decoding.
+func (frame *Frame) ParseReuse(samplesBuf []int32, subframes []*Subframe) error {
+	return frame.parseInto(samplesBuf, subframes)
+}
+
 // Parse reads and parses the audio samples from each subframe of the frame. If
 // the samples are inter-channel decorrelated between the subframes, it
 // correlates them.
@@ -128,9 +136,9 @@ func (frame *Frame) parseInto(samplesBuf []int32, subframes []*Subframe) error {
 	nChannels := frame.Channels.Count()
 	blockSize := int(frame.BlockSize)
 	required := nChannels * blockSize
-	if required > len(samplesBuf) || nChannels > len(subframes) {
-		return fmt.Errorf("frame.Frame.parseInto: frame requires %d channels × %d block size, but buffers have %d samples and %d subframes",
-			nChannels, blockSize, len(samplesBuf), len(subframes))
+	if required > cap(samplesBuf) || nChannels > len(subframes) {
+		return fmt.Errorf("frame.Frame.parseInto: frame requires %d channels × %d block size, but buffers have capacity %d samples and %d subframes",
+			nChannels, blockSize, cap(samplesBuf), len(subframes))
 	}
 	frame.samplesBuf = samplesBuf[:required]
 	frame.Subframes = subframes[:nChannels]
