@@ -73,8 +73,8 @@ func Encode(w io.Writer, x uint64) error {
 		bits := tx | (x>>uint(6*i))&maskx
 		if err := ioutilx.WriteByte(
 			w,
-			byte(bits),
-		); err != nil { //nolint:gosec // bits constructed as tx|6-bit payload, fits in a byte by construction
+			byte(bits), //nolint:gosec // bits = tx (0x80) | 6-bit payload, so the value is in [0x80, 0xBF]
+		); err != nil {
 			return err
 		}
 	}

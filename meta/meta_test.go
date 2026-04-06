@@ -705,54 +705,52 @@ var golden = []struct {
 
 func TestParseBlocks(t *testing.T) {
 	for _, g := range golden {
-		stream, err := flac.ParseFile(g.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer stream.Close()
+		t.Run(g.path, func(t *testing.T) {
+			stream, err := flac.ParseFile(g.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
 
-		blocks := stream.Blocks
+			blocks := stream.Blocks
 
-		if len(blocks) != len(g.blocks) {
-			t.Errorf(
-				"path=%q: invalid number of metadata blocks; expected %d, got %d",
-				g.path,
-				len(g.blocks),
-				len(blocks),
-			)
-
-			continue
-		}
-
-		got := stream.Info
-
-		want := g.info
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("path=%q: metadata StreamInfo block bodies differ; expected %#v, got %#v", g.path, want, got)
-		}
-
-		for blockNum, got := range blocks {
-			want := g.blocks[blockNum]
-			if !reflect.DeepEqual(got.Header, want.Header) {
-				t.Errorf(
-					"path=%q, blockNum=%d: metadata block headers differ; expected %#v, got %#v",
-					g.path,
-					blockNum,
-					want.Header,
-					got.Header,
+			if len(blocks) != len(g.blocks) {
+				t.Fatalf(
+					"invalid number of metadata blocks; expected %d, got %d",
+					len(g.blocks),
+					len(blocks),
 				)
 			}
 
-			if !reflect.DeepEqual(got.Body, want.Body) {
+			if !reflect.DeepEqual(stream.Info, g.info) {
 				t.Errorf(
-					"path=%q, blockNum=%d: metadata block bodies differ; expected %#v, got %#v",
-					g.path,
-					blockNum,
-					want.Body,
-					got.Body,
+					"metadata StreamInfo block bodies differ; expected %#v, got %#v",
+					g.info,
+					stream.Info,
 				)
 			}
-		}
+
+			for blockNum, got := range blocks {
+				want := g.blocks[blockNum]
+				if !reflect.DeepEqual(got.Header, want.Header) {
+					t.Errorf(
+						"blockNum=%d: metadata block headers differ; expected %#v, got %#v",
+						blockNum,
+						want.Header,
+						got.Header,
+					)
+				}
+
+				if !reflect.DeepEqual(got.Body, want.Body) {
+					t.Errorf(
+						"blockNum=%d: metadata block bodies differ; expected %#v, got %#v",
+						blockNum,
+						want.Body,
+						got.Body,
+					)
+				}
+			}
+		})
 	}
 }
 

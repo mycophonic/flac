@@ -505,8 +505,8 @@ func (frame *Frame) scanToSync() error {
 		// two sync bytes so the header CRC covers the complete frame header.
 		syncBytes := [2]byte{
 			0xFF,
-			byte(next),
-		} //nolint:gosec // value bounded by bit-field width just read from the stream
+			byte(next), //nolint:gosec // value bounded by bit-field width just read from the stream
+		}
 
 		br.EnableCRC16()
 		br.EnableCRC8()
@@ -838,12 +838,12 @@ func (frame *Frame) Correlate() {
 			//
 			// ref: Data Compression: The Complete Reference (ch. 7, Decorrelation)
 			m |= s & 1
-			mid[i] = int32(
+			mid[i] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
 				(m + s) >> 1,
-			) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
-			side[i] = int32(
+			)
+			side[i] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
 				(m - s) >> 1,
-			) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
+			)
 		}
 	}
 }

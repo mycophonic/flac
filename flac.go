@@ -150,6 +150,7 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 	return stream, err
 }
 
+//nolint:gochecknoglobals
 var (
 	// flacSignature marks the beginning of a FLAC stream.
 	flacSignature = []byte("fLaC")
@@ -532,7 +533,7 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 	}
 
 	if _, err := stream.br.Seek(
-		stream.dataStart+int64(point.Offset),
+		stream.dataStart+int64(point.Offset), //nolint:gosec // point.Offset overflow validated above
 		io.SeekStart,
 	); err != nil {
 		return 0, err

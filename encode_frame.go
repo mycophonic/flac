@@ -70,12 +70,12 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	if f.HasFixedBlockSize {
 		enc.curNum++
 	} else {
-		enc.curNum += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+		enc.curNum += uint64(nsamplesPerChannel)
 	}
 
-	enc.nsamples += uint64(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+	enc.nsamples += uint64(nsamplesPerChannel)
 
-	blockSize := uint16(nsamplesPerChannel) //nolint:gosec // value bounded by FLAC spec field width
+	blockSize := uint16(nsamplesPerChannel)
 	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
 		enc.blockSizeMin = blockSize
 	}
