@@ -52,7 +52,9 @@ func ExampleOpen() {
 				break
 			}
 
-			log.Fatal(err)
+			fmt.Println(err)
+
+			return
 		}
 
 		frame.Hash(md5sum)

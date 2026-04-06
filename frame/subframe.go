@@ -248,10 +248,10 @@ func signExtend(x uint64, n uint) int32 {
 	// x is signed if its most significant bit is set.
 	if x&(1<<(n-1)) != 0 {
 		// Sign extend x.
-		return int32(x | ^uint64(0)<<n)
+		return int32(x | ^uint64(0)<<n) //nolint:gosec // value bounded by bit-field width just read from the stream
 	}
 
-	return int32(x)
+	return int32(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 }
 
 // decodeConstant reads an unencoded audio sample of the subframe. Each sample
@@ -300,7 +300,7 @@ func (subframe *Subframe) decodeVerbatim(br *bits.Reader, bps uint) error {
 // decodeVerbatimAligned reads verbatim samples in bulk for byte-aligned bit
 // depths. All bytes are read in a single I/O call, then unpacked into samples.
 func (subframe *Subframe) decodeVerbatimAligned(br *bits.Reader, bps uint) error {
-	bytesPerSample := int(bps / 8)
+	bytesPerSample := int(bps / 8) //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 	needed := subframe.NSamples * bytesPerSample
 	// Reuse the grow-only verbatim buffer across frames.
 	if cap(subframe.verbatimBuf) < needed {
@@ -468,9 +468,9 @@ type ResidualCodingMethod uint8
 
 // Residual coding methods.
 const (
-	// Rice coding with a 4-bit Rice parameter (rice1).
+	// ResidualCodingMethodRice1 selects Rice coding with a 4-bit Rice parameter.
 	ResidualCodingMethodRice1 ResidualCodingMethod = 0
-	// Rice coding with a 5-bit Rice parameter (rice2).
+	// ResidualCodingMethodRice2 selects Rice coding with a 5-bit Rice parameter.
 	ResidualCodingMethodRice2 ResidualCodingMethod = 1
 )
 
@@ -485,7 +485,7 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 		return unexpected(err)
 	}
 
-	residualCodingMethod := ResidualCodingMethod(x)
+	residualCodingMethod := ResidualCodingMethod(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 	subframe.ResidualCodingMethod = residualCodingMethod
 	// The 2 bits are used to specify the residual coding method as follows:
 	//    00: Rice coding with a 4-bit Rice parameter.
@@ -493,9 +493,9 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 	//    10: reserved.
 	//    11: reserved.
 	switch residualCodingMethod {
-	case 0x0:
+	case ResidualCodingMethodRice1:
 		return subframe.decodeRicePart(br, 4)
-	case 0x1:
+	case ResidualCodingMethodRice2:
 		return subframe.decodeRicePart(br, 5)
 	default:
 		return fmt.Errorf(
@@ -517,7 +517,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 		return unexpected(err)
 	}
 
-	partOrder := int(x)
+	partOrder := int(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// FLAC spec: block_size must be evenly divisible by 2^partition_order, and
 	// block_size / (2^partition_order) must be >= predictor_order. Violating
@@ -575,11 +575,12 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 
 		// Determine the number of Rice encoded samples in the partition.
 		var nsamples int
-		if partOrder == 0 {
+		switch {
+		case partOrder == 0:
 			nsamples = subframe.NSamples - subframe.Order
-		} else if i != 0 {
+		case i != 0:
 			nsamples = subframe.NSamples / nparts
-		} else {
+		default:
 			nsamples = subframe.NSamples/nparts - subframe.Order
 		}
 
@@ -607,7 +608,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 				// complement.  For example, when a partition is escaped and each
 				// residual sample is stored with 3 bits, the number -1 is
 				// represented as 0b111.
-				subframe.Samples[sIdx] = int32(bits.IntN(sample, n))
+				subframe.Samples[sIdx] = int32(bits.IntN(sample, n)) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
 				sIdx++
 			}
 
@@ -659,7 +660,7 @@ func (subframe *Subframe) decodeLPC(coeffs []int32, shift int32) error {
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
 
-		subframe.Samples[i] += int32(sample >> uint(shift))
+		subframe.Samples[i] += int32(sample >> uint(shift)) //nolint:gosec // result of int64 intermediate fits in int32 for valid FLAC samples (bps <= 32)
 	}
 
 	return nil

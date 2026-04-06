@@ -26,8 +26,7 @@ var ATMTable = makeTable(ATM)
 
 // MakeTable returns the Table constructed from the specified polynomial.
 func MakeTable(poly uint8) (table *Table) {
-	switch poly {
-	case ATM:
+	if poly == ATM {
 		return ATMTable
 	}
 

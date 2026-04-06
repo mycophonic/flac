@@ -1,8 +1,10 @@
-package crc8
+package crc8_test
 
 import (
 	"io"
 	"testing"
+
+	"github.com/mycophonic/flac/internal/hashutil/crc8"
 )
 
 type test struct {
@@ -50,7 +52,7 @@ var golden = []test{
 
 func TestCrc8ATM(t *testing.T) {
 	for _, g := range golden {
-		h := NewATM()
+		h := crc8.NewATM()
 		if _, err := io.WriteString(h, g.in); err != nil {
 			t.Error(err)
 
@@ -66,7 +68,7 @@ func TestCrc8ATM(t *testing.T) {
 
 func BenchmarkNewATM(b *testing.B) {
 	for range b.N {
-		NewATM()
+		crc8.NewATM()
 	}
 }
 
@@ -91,6 +93,7 @@ func BenchmarkCrc8_16K(b *testing.B) {
 }
 
 func benchmarkCrc8(b *testing.B, count int64) {
+	b.Helper()
 	b.SetBytes(count)
 
 	data := make([]byte, count)
@@ -98,7 +101,7 @@ func benchmarkCrc8(b *testing.B, count int64) {
 		data[i] = byte(i)
 	}
 
-	h := NewATM()
+	h := crc8.NewATM()
 	in := make([]byte, 0, h.Size())
 
 	b.ResetTimer()

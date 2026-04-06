@@ -1,5 +1,11 @@
 package bits
 
+import "errors"
+
+// errRiceInvariant is returned when ReadRice's internal invariant is violated.
+// It should never trigger in practice; see the guard in ReadRice for details.
+var errRiceInvariant = errors.New("bits.ReadRice: invariant violation: nBytes == 0")
+
 // ReadRice decodes a single Rice-coded residual with the given Rice parameter k.
 // It fuses ReadUnary + Read(k) + ZigZag decode into a single method to avoid
 // per-residual function call overhead. After ReadUnary finds the terminating
@@ -40,8 +46,21 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 				nBytes++
 			}
 
-			if err = br.needBytes(int(nBytes)); err != nil {
+			if err = br.needBytes(int(nBytes)); err != nil { //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
 				return 0, err
+			}
+
+			// Defensive guard: nBytes is uint, so nBytes - 1 would
+			// underflow to MaxUint and the for-range loop below would
+			// attempt ~1.8e19 iterations. The current call path
+			// guarantees nBytes >= 1 (we only enter this else branch when
+			// k > br.n, so remaining = k - br.n >= 1, which forces
+			// nBytes >= 1 after the rounding-up of nBits), but the
+			// invariant is non-local and could be broken by a refactor.
+			// This branch is never taken in practice; the predictor
+			// handles it for free.
+			if nBytes == 0 {
+				return 0, errRiceInvariant
 			}
 
 			oldPos := br.pos
@@ -70,7 +89,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 	}
 
 	// Phase 3: combine and ZigZag decode inline.
-	folded := uint32(high<<k | low)
+	folded := uint32(high<<k | low) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	return int32(folded>>1) ^ -int32(folded&1), nil
 }

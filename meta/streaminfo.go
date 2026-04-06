@@ -1,7 +1,7 @@
 package meta
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // FLAC spec mandates MD5 for sample integrity, not used as a security primitive
 	"errors"
 	"fmt"
 
@@ -54,7 +54,7 @@ func (block *Block) parseStreamInfo() error {
 
 	si := new(StreamInfo)
 	block.Body = si
-	si.BlockSizeMin = uint16(x)
+	si.BlockSizeMin = uint16(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 16 bits: BlockSizeMax.
 	x, err = br.Read(16)
@@ -66,7 +66,7 @@ func (block *Block) parseStreamInfo() error {
 		return fmt.Errorf("meta.Block.parseStreamInfo: invalid maximum block size (%d); expected >= 16", x)
 	}
 
-	si.BlockSizeMax = uint16(x)
+	si.BlockSizeMax = uint16(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 24 bits: FrameSizeMin.
 	x, err = br.Read(24)
@@ -74,7 +74,7 @@ func (block *Block) parseStreamInfo() error {
 		return unexpected(err)
 	}
 
-	si.FrameSizeMin = uint32(x)
+	si.FrameSizeMin = uint32(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 24 bits: FrameSizeMax.
 	x, err = br.Read(24)
@@ -82,7 +82,7 @@ func (block *Block) parseStreamInfo() error {
 		return unexpected(err)
 	}
 
-	si.FrameSizeMax = uint32(x)
+	si.FrameSizeMax = uint32(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 20 bits: SampleRate.
 	x, err = br.Read(20)
@@ -94,7 +94,7 @@ func (block *Block) parseStreamInfo() error {
 		return errors.New("meta.Block.parseStreamInfo: invalid sample rate (0)")
 	}
 
-	si.SampleRate = uint32(x)
+	si.SampleRate = uint32(x) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 3 bits: NChannels.
 	x, err = br.Read(3)
@@ -102,7 +102,7 @@ func (block *Block) parseStreamInfo() error {
 		return unexpected(err)
 	}
 	// x contains: (number of channels) - 1
-	si.NChannels = uint8(x + 1)
+	si.NChannels = uint8(x + 1) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 5 bits: BitsPerSample.
 	x, err = br.Read(5)
@@ -110,7 +110,7 @@ func (block *Block) parseStreamInfo() error {
 		return unexpected(err)
 	}
 	// x contains: (bits-per-sample) - 1
-	si.BitsPerSample = uint8(x + 1)
+	si.BitsPerSample = uint8(x + 1) //nolint:gosec // value bounded by bit-field width just read from the stream
 
 	// 36 bits: NSamples.
 	si.NSamples, err = br.Read(36)
