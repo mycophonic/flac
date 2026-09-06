@@ -833,9 +833,9 @@ func TestVorbisCommentTooManyTags(t *testing.T) {
 // TestVorbisCommentTooManyTagsOOM is designed to parse corrupt or malicious data that may lead to out-of-memory
 // problems.
 // It is skipped by default as it may cause instability during test runs.
+// Note: intentionally NOT parallelized — running this concurrently with other tests
+// would amplify memory pressure when enabled.
 func TestVorbisCommentTooManyTagsOOM(t *testing.T) {
-	t.Parallel()
-
 	t.Skip()
 
 	for range 255 {

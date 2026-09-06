@@ -2,22 +2,24 @@
 // Original copyright 2016 Andras Belicza, Apache License 2.0.
 // Adapted to use the standard library testing package (mighty helpers removed).
 
-package bitio
+package bitio_test
 
 import (
 	"bytes"
 	"errors"
 	"io"
 	"testing"
+
+	"github.com/mycophonic/flac/internal/bitio"
 )
 
-// testWriter that does not implement io.ByteWriter so we can test the
+// testWriter does not implement io.ByteWriter so we can test the
 // behaviour of Writer when it creates an internal bufio.Writer.
 type testWriter struct {
 	b *bytes.Buffer
 }
 
-func (w *testWriter) Write(p []byte) (n int, err error) {
+func (w *testWriter) Write(p []byte) (int, error) {
 	return w.b.Write(p)
 }
 
@@ -26,6 +28,8 @@ func (w *testWriter) Bytes() []byte {
 }
 
 func TestWriter(t *testing.T) {
+	t.Parallel()
+
 	for i := range 2 {
 		// 2 rounds, first use something that implements io.ByteWriter (*bytes.Buffer),
 		// next testWriter which does not.
@@ -33,16 +37,15 @@ func TestWriter(t *testing.T) {
 			io.Writer
 			Bytes() []byte
 		}
-		{
-			buf := &bytes.Buffer{}
 
-			b = buf
-			if i > 0 {
-				b = &testWriter{b: buf}
-			}
+		buf := &bytes.Buffer{}
+
+		b = buf
+		if i > 0 {
+			b = &testWriter{b: buf}
 		}
 
-		w := NewWriter(b)
+		w := bitio.NewWriter(b)
 
 		expected := []byte{0xc1, 0x7f, 0xac, 0x89, 0x24, 0x78, 0x01, 0x02, 0xf8, 0x08, 0xf0, 0xff, 0x80, 0x12, 0x34}
 
@@ -125,16 +128,20 @@ type nonByteReaderWriter struct {
 }
 
 func TestNonByteWriter(t *testing.T) {
-	NewWriter(nonByteReaderWriter{})
+	t.Parallel()
+
+	bitio.NewWriter(nonByteReaderWriter{})
 }
+
+var errNoMoreWrites = errors.New("can't write more")
 
 type errWriter struct {
 	limit int
 }
 
-func (e *errWriter) WriteByte(c byte) error {
+func (e *errWriter) WriteByte(_ byte) error {
 	if e.limit == 0 {
-		return errors.New("Can't write more")
+		return errNoMoreWrites
 	}
 
 	e.limit--
@@ -142,7 +149,7 @@ func (e *errWriter) WriteByte(c byte) error {
 	return nil
 }
 
-func (e *errWriter) Write(p []byte) (n int, err error) {
+func (e *errWriter) Write(p []byte) (int, error) {
 	for i, v := range p {
 		if err := e.WriteByte(v); err != nil {
 			return i, err
@@ -153,6 +160,8 @@ func (e *errWriter) Write(p []byte) (n int, err error) {
 }
 
 func TestWriterError(t *testing.T) {
+	t.Parallel()
+
 	eq := func(want, got any) {
 		t.Helper()
 
@@ -164,7 +173,7 @@ func TestWriterError(t *testing.T) {
 		t.Helper()
 
 		if err == nil {
-			t.Fatalf("expected non-nil error")
+			t.Fatal("expected non-nil error")
 		}
 	}
 	eqNil := func(err error) {
@@ -175,24 +184,24 @@ func TestWriterError(t *testing.T) {
 		}
 	}
 
-	w := NewWriter(&errWriter{1})
+	w := bitio.NewWriter(&errWriter{1})
 	eqNil(w.WriteBool(true))
 	got, err := w.Write([]byte{0x01, 0x02})
 	eq(1, got)
 	neqNil(err)
 	neqNil(w.Close())
 
-	w = NewWriter(&errWriter{0})
+	w = bitio.NewWriter(&errWriter{0})
 	neqNil(w.WriteBits(0x00, 9))
 
-	w = NewWriter(&errWriter{1})
+	w = bitio.NewWriter(&errWriter{1})
 	neqNil(w.WriteBits(0x00, 17))
 
-	w = NewWriter(&errWriter{})
+	w = bitio.NewWriter(&errWriter{})
 	eqNil(w.WriteBits(0x00, 7))
 	neqNil(w.WriteBool(false))
 
-	w = NewWriter(&errWriter{})
+	w = bitio.NewWriter(&errWriter{})
 	eqNil(w.WriteBool(true))
 	_, err = w.Align()
 	neqNil(err)

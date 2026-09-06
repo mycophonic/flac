@@ -13,6 +13,16 @@ import (
 
 // encodeSubframe encodes the given subframe, writing to bw.
 func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe, bps uint) error {
+	// Wasted bits must leave at least one bit per sample; otherwise the
+	// subtraction below would underflow the uint and produce a garbage
+	// bit width for subsequent WriteBits calls (silent stream corruption).
+	if subframe.Wasted >= bps {
+		return fmt.Errorf(
+			"invalid wasted bits-per-sample %d; must be less than bps %d",
+			subframe.Wasted, bps,
+		)
+	}
+
 	// Encode subframe header.
 	if err := encodeSubframeHeader(bw, subframe.SubHeader); err != nil {
 		return err
