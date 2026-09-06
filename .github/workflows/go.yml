@@ -38,9 +38,11 @@ jobs:
         run: go test -v -covermode atomic -coverprofile=covprofile ./...
 
       - name: Gofmt
-        # Run gofmt, print the output and exit with status code 1 if it isn't empty.
+        # List the files gofmt would change and fail if there are any. Not
+        # `gofmt -d` in a `$(…)`: it exits 1 on a diff, and under `bash -e`
+        # the step then dies before the echo, hiding what it found.
         run: |
-          OUTPUT=$(gofmt -d ./)
+          OUTPUT=$(gofmt -l ./)
           echo "$OUTPUT"
           test -z "$OUTPUT"
 
