@@ -2,6 +2,7 @@ package flac
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -22,6 +23,12 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	nchannels := int(enc.Info.NChannels)
 	if nchannels != len(f.Subframes) {
 		return fmt.Errorf("subframe and channel count mismatch; expected %d, got %d", nchannels, len(f.Subframes))
+	}
+
+	// FLAC spec: at least one channel is required. A zero-channel stream
+	// is invalid and would cause f.Subframes[0] below to panic.
+	if nchannels == 0 {
+		return errors.New("invalid frame: at least one channel required")
 	}
 
 	nsamplesPerChannel := f.Subframes[0].NSamples
