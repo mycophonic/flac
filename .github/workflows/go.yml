@@ -27,15 +27,11 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Install goveralls
-        if: ${{ matrix.go-version == 'stable' && github.ref == 'refs/heads/main' }}
-        run: go install github.com/mattn/goveralls@latest
-
       - name: Build
         run: go build -v ./...
 
       - name: Test
-        run: go test -v -covermode atomic -coverprofile=covprofile ./...
+        run: go test -v ./...
 
       - name: Gofmt
         # List the files gofmt would change and fail if there are any. Not
@@ -45,9 +41,3 @@ jobs:
           OUTPUT=$(gofmt -l ./)
           echo "$OUTPUT"
           test -z "$OUTPUT"
-
-      - name: Send coverage
-        if: ${{ matrix.go-version == 'stable' && github.ref == 'refs/heads/main' }}
-        env:
-          COVERALLS_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-        run: goveralls -coverprofile=covprofile -service=github
