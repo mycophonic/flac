@@ -18,12 +18,12 @@ jobs:
         go-version: ['stable']
     name: Build with Go ${{ matrix.go-version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -38,9 +38,11 @@ jobs:
         run: go test -v -covermode atomic -coverprofile=covprofile ./...
 
       - name: Gofmt
-        # Run gofmt, print the output and exit with status code 1 if it isn't empty.
+        # List the files gofmt would change and fail if there are any. Not
+        # `gofmt -d` in a `$(…)`: it exits 1 on a diff, and under `bash -e`
+        # the step then dies before the echo, hiding what it found.
         run: |
-          OUTPUT=$(gofmt -d ./)
+          OUTPUT=$(gofmt -l ./)
           echo "$OUTPUT"
           test -z "$OUTPUT"
 
