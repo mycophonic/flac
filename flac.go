@@ -368,6 +368,8 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 		return f, err
 	}
 
+	f.SetStreamBlockSizes(stream.Info.BlockSizeMin, stream.Info.BlockSizeMax)
+
 	// Each frame header independently specifies its own channel assignment
 	// (frame/frame.go parseChannels), which may differ from StreamInfo.NChannels
 	// in malformed files (e.g. IETF faulty/04 "wrong number of channels") or in
@@ -427,6 +429,8 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 	if err != nil {
 		return f, err
 	}
+
+	f.SetStreamBlockSizes(stream.Info.BlockSizeMin, stream.Info.BlockSizeMax)
 
 	// See Next() for rationale on channel count validation.
 	if got, want := f.Channels.Count(), int(stream.Info.NChannels); got != want {

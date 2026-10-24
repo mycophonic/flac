@@ -58,6 +58,15 @@ type Frame struct {
 	// channel of a 32-bit stream, until Correlate: the subframe's wide
 	// buffer, nil when no subframe of this frame decoded wide.
 	wide []int64
+	// The stream's block sizes from STREAMINFO, set by SetStreamBlockSizes,
+	// which SampleNumber needs: a fixed-blocksize frame's number counts
+	// frames of the stream's block size, not of its own (the last frame is
+	// shorter), and a stream whose block size varies numbers its frames by
+	// sample whatever a header's blocking-strategy bit says, as libFLAC
+	// reads it. Zero when unset: SampleNumber then falls back to the frame's
+	// own block size.
+	streamBlockSize uint16
+	variableStream  bool
 }
 
 // New creates a new Frame for accessing the audio samples via the provided bit
@@ -926,11 +935,29 @@ func (frame *Frame) Decorrelate() {
 
 // SampleNumber returns the first sample number contained within the frame.
 func (frame *Frame) SampleNumber() uint64 {
-	if frame.HasFixedBlockSize {
-		return frame.Num * uint64(frame.BlockSize)
+	if !frame.HasFixedBlockSize || frame.variableStream {
+		return frame.Num
 	}
 
-	return frame.Num
+	blockSize := frame.streamBlockSize
+	if blockSize == 0 {
+		blockSize = frame.BlockSize
+	}
+
+	return frame.Num * uint64(blockSize)
+}
+
+// SetStreamBlockSizes tells the frame the stream's minimum and maximum block
+// size from STREAMINFO, which SampleNumber needs for a fixed-blocksize frame:
+// its number counts frames of the stream's block size, where the last frame
+// is shorter; and a stream whose block size varies (the two differ) numbers
+// its frames by sample whatever a header's blocking-strategy bit says, as
+// libFLAC reads it (the IETF test file 27 carries the fixed bit with sample
+// numbers). Stream.Next and ParseNext call it; a caller using New directly
+// may.
+func (frame *Frame) SetStreamBlockSizes(blockSizeMin, blockSizeMax uint16) {
+	frame.variableStream = blockSizeMin != blockSizeMax
+	frame.streamBlockSize = blockSizeMax
 }
 
 // unexpected returns io.ErrUnexpectedEOF if err is io.EOF, and returns err
