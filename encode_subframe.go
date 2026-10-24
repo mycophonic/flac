@@ -35,6 +35,10 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 		return err
 	}
 
+	if err := checkSampleRange(subframe.Samples, bps); err != nil {
+		return err
+	}
+
 	if err := encodeSubframeHeader(bw, subframe.SubHeader); err != nil {
 		return err
 	}
@@ -100,6 +104,27 @@ var (
 	errCoeffShift       = errors.New("invalid coefficient shift; must be at most 15")
 	errNoRicePartitions = errors.New("a predictor subframe needs its Rice partitions: analysis, or RiceSubframe")
 )
+
+var errSampleRange = errors.New("sample beyond the subframe's bit depth")
+
+// checkSampleRange refuses a sample the subframe's depth cannot carry: it
+// was written truncated and hashed as written, a stream the reference
+// accepts whose content is not what the caller passed. The depth is the
+// subframe's, a side channel's one bit wider than the frame's.
+func checkSampleRange(samples []int32, bps uint) error {
+	if bps >= 32 {
+		return nil // every int32 fits
+	}
+
+	limit := int32(1) << (bps - 1)
+	for i, sample := range samples {
+		if sample < -limit || sample >= limit {
+			return fmt.Errorf("%w: sample %d is %d at %d bits", errSampleRange, i, sample, bps)
+		}
+	}
+
+	return nil
+}
 
 // checkPredictor refuses a fixed or FIR subframe whose fields the stream
 // cannot carry, or that has no Rice partitions to code its residuals in:
