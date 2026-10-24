@@ -24,6 +24,13 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 	}
 
 	// Encode subframe header.
+	if subframe.Order >= len(subframe.Samples) {
+		return fmt.Errorf(
+			"invalid predictor order %d; must be below the block size %d",
+			subframe.Order, len(subframe.Samples),
+		)
+	}
+
 	if err := encodeSubframeHeader(bw, subframe.SubHeader); err != nil {
 		return err
 	}

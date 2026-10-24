@@ -69,6 +69,18 @@ func (frame *Frame) parseSubframeInto(br *bits.Reader, bps uint, samples []int32
 	subframe.NSamples = int(frame.BlockSize)
 	subframe.Samples = samples[:subframe.NSamples]
 
+	// The predictor's warm-up samples are the block's first Order samples,
+	// and at least one sample is predicted: the order is below the block
+	// size, as the reference decoder has it. Above it, the warm-up loops
+	// would index past the block.
+	if subframe.Order >= subframe.NSamples {
+		return fmt.Errorf(
+			"frame.Subframe.parseSubframeInto: predictor order %d not below the block size %d",
+			subframe.Order,
+			subframe.NSamples,
+		)
+	}
+
 	var err error
 
 	switch subframe.Pred {
