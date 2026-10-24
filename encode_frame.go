@@ -16,8 +16,16 @@ import (
 
 // --- [ Frame ] ---------------------------------------------------------------
 
+// wideBitsPerSample is the depth whose decorrelated side channel would not
+// fit the int32 samples.
+const wideBitsPerSample = 32
+
 // WriteFrame encodes the given audio frame to the output stream. The Num field
 // of the frame header is automatically calculated by the encoder.
+//
+// WriteFrame sets f.Num to the frame's number in the stream, and writes a
+// 32-bit frame asked for with a decorrelated assignment as independent
+// channels, setting f.Channels to ChannelsLR.
 func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// Sanity checks.
 	nchannels := int(enc.Info.NChannels)
@@ -64,6 +72,15 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 
 	if nchannels != f.Channels.Count() {
 		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
+	}
+
+	// A decorrelated 32-bit frame's side channel is 33 bits, which the
+	// int32 samples cannot hold: Decorrelate would wrap it, and the stream
+	// would decode to other samples than the caller's. The channels are
+	// written independently instead, which is lossless; the header the
+	// stream carries says so.
+	if f.BitsPerSample == wideBitsPerSample && f.Channels.Decorrelated() {
+		f.Channels = frame.ChannelsLR
 	}
 
 	// Create a new CRC-16 hash writer which adds the data from all write

@@ -808,6 +808,17 @@ var nChannels = [...]int{
 	ChannelsMidSide:        2,
 }
 
+// Decorrelated reports whether the assignment carries a side channel, one
+// bit wider than the others.
+func (channels Channels) Decorrelated() bool {
+	switch channels {
+	case ChannelsLeftSide, ChannelsSideRight, ChannelsMidSide:
+		return true
+	default:
+		return false
+	}
+}
+
 // Count returns the number of channels (subframes) used by the provided channel
 // assignment.
 func (channels Channels) Count() int {
