@@ -95,6 +95,10 @@ func New(r io.Reader) (stream *Stream, err error) {
 			return stream, err
 		}
 
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
+		}
+
 		if err = block.Skip(); err != nil {
 			return stream, err
 		}
@@ -130,6 +134,10 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 			if err = block.Skip(); err != nil {
 				return stream, err
 			}
+		}
+
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
 		}
 
 		if block.Type == meta.TypeSeekTable {
@@ -171,6 +179,10 @@ var (
 	// stream whose first metadata block is not a STREAMINFO, on its
 	// header's type and before its body is parsed.
 	ErrFirstBlockNotStreamInfo = errors.New("flac: the first metadata block is not a STREAMINFO")
+
+	// ErrSecondStreamInfo is returned by New, NewSeek and Parse for a stream
+	// with more than one STREAMINFO block; the format has exactly one, first.
+	ErrSecondStreamInfo = errors.New("flac: a second STREAMINFO block")
 )
 
 const (
@@ -293,6 +305,10 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 			if err = block.Skip(); err != nil {
 				return stream, err
 			}
+		}
+
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
 		}
 
 		stream.Blocks = append(stream.Blocks, block)

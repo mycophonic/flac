@@ -30,6 +30,12 @@ func (block *Block) parseSeekTable() error {
 		return errors.New("meta.Block.parseSeekTable: at least one seek point is required")
 	}
 
+	// The table is whole points: a length that is not a multiple of 18 is
+	// a malformed block, which the reference decoder refuses too.
+	if block.Length%18 != 0 {
+		return fmt.Errorf("meta.Block.parseSeekTable: block length %d is not a multiple of 18", block.Length)
+	}
+
 	if n > maxSeekPoints {
 		return fmt.Errorf("meta.parseSeekTable: %w, number of seekpoints: %d", ErrDeclaredBlockTooBig, n)
 	}
