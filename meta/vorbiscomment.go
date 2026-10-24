@@ -28,7 +28,7 @@ func (block *Block) parseVorbisComment() (err error) {
 	}
 
 	// (vendor length) bits: Vendor.
-	vendor, err := readString(block.lr, int(x))
+	vendor, err := block.readString(x)
 	if err != nil {
 		return unexpected(err)
 	}
@@ -59,7 +59,7 @@ func (block *Block) parseVorbisComment() (err error) {
 		}
 
 		// (vector length): vector.
-		vector, err := readString(block.lr, int(x))
+		vector, err := block.readString(x)
 		if err != nil {
 			return unexpected(err)
 		}

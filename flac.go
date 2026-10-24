@@ -95,6 +95,10 @@ func New(r io.Reader) (stream *Stream, err error) {
 			return stream, err
 		}
 
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
+		}
+
 		if err = block.Skip(); err != nil {
 			return stream, err
 		}
@@ -132,6 +136,10 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 			}
 		}
 
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
+		}
+
 		if block.Type == meta.TypeSeekTable {
 			stream.seekTable = block.Body.(*meta.SeekTable)
 		}
@@ -166,6 +174,15 @@ var (
 	// ErrNoSeektable reports that no seektable has been generated. Therefore,
 	// it is not possible to seek in the stream.
 	ErrNoSeektable = errors.New("stream.searchFromStart: no seektable exists")
+
+	// ErrFirstBlockNotStreamInfo is returned by every constructor for a
+	// stream whose first metadata block is not a STREAMINFO, on its
+	// header's type and before its body is parsed.
+	ErrFirstBlockNotStreamInfo = errors.New("flac: the first metadata block is not a STREAMINFO")
+
+	// ErrSecondStreamInfo is returned by New, NewSeek and Parse for a stream
+	// with more than one STREAMINFO block; the format has exactly one, first.
+	ErrSecondStreamInfo = errors.New("flac: a second STREAMINFO block")
 )
 
 const (
@@ -206,8 +223,21 @@ func (stream *Stream) parseStreamInfo() (block *meta.Block, err error) {
 	}
 
 	// Parse StreamInfo metadata block.
-	block, err = meta.Parse(r)
-	if err != nil {
+	// The first block's header is read before its body: a first block that
+	// is not a STREAMINFO is refused on its type, not parsed, so no other
+	// parser sizes an allocation from it.
+	// A reserved type is still a header read, and not a STREAMINFO: the
+	// type check answers for it; any other error, or no block, is returned.
+	block, err = meta.New(r)
+	if err != nil && (block == nil || !errors.Is(err, meta.ErrReservedType)) {
+		return block, err
+	}
+
+	if block.Type != meta.TypeStreamInfo {
+		return block, fmt.Errorf("%w: got %v", ErrFirstBlockNotStreamInfo, block.Type)
+	}
+
+	if err = block.Parse(); err != nil {
 		return block, err
 	}
 
@@ -275,6 +305,10 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 			if err = block.Skip(); err != nil {
 				return stream, err
 			}
+		}
+
+		if block.Type == meta.TypeStreamInfo {
+			return stream, ErrSecondStreamInfo
 		}
 
 		stream.Blocks = append(stream.Blocks, block)
@@ -410,6 +444,10 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 		f.BitsPerSample = stream.Info.BitsPerSample
 	}
 
+	if err = stream.checkSampleRate(f); err != nil {
+		return nil, err
+	}
+
 	// Validate running sample count against StreamInfo.NSamples.
 	// See ParseNext() for detailed rationale.
 	stream.samplesDecoded += uint64(f.BlockSize)
@@ -455,6 +493,10 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 		f.BitsPerSample = stream.Info.BitsPerSample
 	}
 
+	if err = stream.checkSampleRate(f); err != nil {
+		return nil, err
+	}
+
 	// Now parse subframes with the resolved header.
 	if err = f.ParseReuse(stream.samplesBuf, stream.subframeBuf); err != nil {
 		return f, err
@@ -479,6 +521,23 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 	}
 
 	return f, nil
+}
+
+// checkSampleRate holds a frame's sample rate to STREAMINFO's, as the channel
+// count and the bit depth are held: a stream whose rate changes mid-way would
+// otherwise play at the wrong rate from a caller sized by STREAMINFO, where
+// the reference decoder refuses the file. A frame whose rate code defers to
+// STREAMINFO carries 0 here, which is not a mismatch.
+func (stream *Stream) checkSampleRate(f *frame.Frame) error {
+	if f.SampleRate != 0 && f.SampleRate != stream.Info.SampleRate {
+		return fmt.Errorf(
+			"flac.Stream: sample rate mismatch; frame has %d Hz, STREAMINFO has %d",
+			f.SampleRate,
+			stream.Info.SampleRate,
+		)
+	}
+
+	return nil
 }
 
 // validateSampleCount returns an error if the running total of decoded samples

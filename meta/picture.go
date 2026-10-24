@@ -71,7 +71,7 @@ func (block *Block) parsePicture() error {
 	}
 
 	// (MIME type length) bytes: MIME.
-	mime, err := readString(block.lr, int(x))
+	mime, err := block.readString(x)
 	if err != nil {
 		return unexpected(err)
 	}
@@ -84,7 +84,7 @@ func (block *Block) parsePicture() error {
 	}
 
 	// (description length) bytes: Desc.
-	desc, err := readString(block.lr, int(x))
+	desc, err := block.readString(x)
 	if err != nil {
 		return unexpected(err)
 	}
@@ -124,9 +124,14 @@ func (block *Block) parsePicture() error {
 		return fmt.Errorf("meta.parsePicture: %w, picture data size=%d", ErrDeclaredBlockTooBig, x)
 	}
 
-	// (data length) bytes: Data.
-	pic.Data = make([]byte, x)
-	_, err = io.ReadFull(block.lr, pic.Data)
+	// The data must lie within the block before it is allocated.
+	if int64(x) > block.remaining() {
+		return unexpected(io.ErrUnexpectedEOF)
+	}
+
+	// (data length) bytes: Data, read into a buffer that grows as the bytes
+	// arrive, so a cut stream costs what it held.
+	pic.Data, err = readGrowing(block.lr, int64(x))
 
 	return unexpected(err)
 }
