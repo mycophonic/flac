@@ -97,10 +97,10 @@ func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {
 		bits = 0x01
 	case frame.PredFixed:
 		// 001xxx : if(xxx <= 4) SUBFRAME_FIXED, xxx=order ; else reserved
-		bits = 0x08 | uint64(subHdr.Order) //nolint:gosec // value bounded by FLAC spec field width
+		bits = 0x08 | uint64(subHdr.Order) // #nosec G115 -- value bounded by FLAC spec field width
 	case frame.PredFIR:
 		// 1xxxxx : SUBFRAME_LPC, xxxxx=order-1
-		bits = 0x20 | uint64(subHdr.Order-1) //nolint:gosec // value bounded by FLAC spec field width
+		bits = 0x20 | uint64(subHdr.Order-1) // #nosec G115 -- value bounded by FLAC spec field width
 	}
 
 	if err := bw.WriteBits(bits, 6); err != nil {
@@ -140,7 +140,7 @@ func encodeConstantSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 	}
 	// Unencoded constant value of the subblock, n = frame's bits-per-sample.
 	// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
-	//nolint:gosec
+	// #nosec G115
 	if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func encodeVerbatimSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.S
 
 	for _, sample := range samples {
 		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
-		//nolint:gosec
+		// #nosec G115
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func encodeFixedSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subf
 	for i := range subframe.Order {
 		sample := samples[i]
 		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
-		//nolint:gosec
+		// #nosec G115
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
@@ -213,7 +213,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	for i := range subframe.Order {
 		sample := samples[i]
 		// sample is int32 audio data; bps is FLAC-spec bounded (<=32). Both casts safe.
-		//nolint:gosec
+		// #nosec G115
 		if err := bw.WriteBits(uint64(sample), uint8(bps)); err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 
 	// 5 bits: predictor coefficient shift needed in bits.
 	// CoeffShift is a 5-bit signed predictor coefficient shift per FLAC spec.
-	//nolint:gosec
+	// #nosec G115
 	if err := bw.WriteBits(uint64(subframe.CoeffShift), 5); err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func encodeFIRSamples(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subfra
 	// Encode coefficients.
 	for _, coeff := range subframe.Coeffs {
 		// (prec) bits: Predictor coefficient. coeff is int32 bounded by CoeffPrec bits.
-		//nolint:gosec
+		// #nosec G115
 		if err := bw.WriteBits(uint64(coeff), uint8(subframe.CoeffPrec)); err != nil {
 			return err
 		}
@@ -340,7 +340,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 		param := partition.Param
 		if err := bw.WriteBits(
 			uint64(param),
-			uint8(paramSize), //nolint:gosec // bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
+			uint8(paramSize), // #nosec G115 -- bps/paramSize bounded by FLAC spec (bps<=32, paramSize is 4 or 5)
 		); err != nil {
 			return err
 		}
@@ -377,7 +377,7 @@ func encodeRicePart(bw *bitio.Writer, subframe *frame.Subframe, paramSize uint, 
 				curResidualIndex++
 
 				// residual is int32; EscapedBitsPerSample is FLAC-spec bounded (5-bit field).
-				//nolint:gosec
+				// #nosec G115
 				if err := bw.WriteBits(uint64(residual), uint8(partition.EscapedBitsPerSample)); err != nil {
 					return err
 				}
@@ -417,7 +417,7 @@ func encodeRiceResidual(bw *bitio.Writer, k uint, residual int32) error {
 	}
 
 	// Write binary encoded least significant bits.
-	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil { //nolint:gosec // value bounded by FLAC spec field width
+	if err := bw.WriteBits(uint64(low), uint8(k)); err != nil { // #nosec G115 -- value bounded by FLAC spec field width
 		return err
 	}
 
@@ -457,7 +457,7 @@ func getLPCResiduals(subframe *frame.Subframe, coeffs []int32, shift int32) ([]i
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
 
-		residual := subframe.Samples[i] - int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+		residual := subframe.Samples[i] - int32( // #nosec G115 -- int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
 			sample>>uint(shift),
 		)
 		residuals = append(residuals, residual)

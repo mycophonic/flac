@@ -142,8 +142,6 @@ func (w *Writer) WriteByte(b byte) error {
 }
 
 // WriteBool writes one bit: 1 if value is true, 0 otherwise.
-//
-//revive:disable-next-line:flag-parameter
 func (w *Writer) WriteBool(value bool) error {
 	if w.bits == 7 {
 		out := w.cache

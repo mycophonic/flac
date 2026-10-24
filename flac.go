@@ -296,7 +296,7 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 //
 // Note: The Close method of the stream must be called when finished using it.
 func Open(path string) (stream *Stream, err error) {
-	f, err := os.Open(path) //nolint:gosec // caller-controlled path is the API contract
+	f, err := os.Open(path) // #nosec G304 -- caller-controlled path is the API contract
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ func Open(path string) (stream *Stream, err error) {
 //
 // Note: The Close method of the stream must be called when finished using it.
 func ParseFile(path string) (stream *Stream, err error) {
-	f, err := os.Open(path) //nolint:gosec // caller-controlled path is the API contract
+	f, err := os.Open(path) // #nosec G304 -- caller-controlled path is the API contract
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +533,7 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 	}
 
 	if _, err := stream.br.Seek(
-		stream.dataStart+int64(point.Offset), //nolint:gosec // point.Offset overflow validated above
+		stream.dataStart+int64(point.Offset), // #nosec G115 -- point.Offset overflow validated above
 		io.SeekStart,
 	); err != nil {
 		return 0, err
@@ -646,7 +646,7 @@ func (stream *Stream) makeSeekTable() (err error) {
 
 		points = append(points, meta.SeekPoint{
 			SampleNum: sampleNum,
-			Offset:    uint64(off - stream.dataStart), //nolint:gosec // value is non-negative by construction
+			Offset:    uint64(off - stream.dataStart), // #nosec G115 -- value is non-negative by construction
 			NSamples:  f.BlockSize,
 		})
 
