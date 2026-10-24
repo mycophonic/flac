@@ -102,6 +102,36 @@ var (
 
 // Parse reads and parses the metadata block body.
 func (block *Block) Parse() error {
+	if err := block.parseBody(); err != nil {
+		return err
+	}
+
+	// The block's bytes must all be in the stream: a body parser that reads
+	// to the end of a block cut short sees a plain EOF, and the stream would
+	// then end cleanly with no frame.
+	return block.drain()
+}
+
+// Skip ignores the contents of the metadata block body.
+func (block *Block) Skip() error {
+	if sr, ok := block.lr.(io.Seeker); ok {
+		_, err := sr.Seek(0, io.SeekEnd)
+
+		return err
+	}
+
+	// A block cut short by the stream's end is not skipped: io.Copy
+	// reports a short copy as success, so the count tells.
+	n, err := io.Copy(io.Discard, block.lr)
+	if err == nil && n < block.Length {
+		return io.ErrUnexpectedEOF
+	}
+
+	return err
+}
+
+// parseBody parses the block body by its type.
+func (block *Block) parseBody() error {
 	switch block.Type {
 	case TypeStreamInfo:
 		return block.parseStreamInfo()
@@ -126,17 +156,29 @@ func (block *Block) Parse() error {
 	return ErrInvalidType
 }
 
-// Skip ignores the contents of the metadata block body.
-func (block *Block) Skip() error {
-	if sr, ok := block.lr.(io.Seeker); ok {
-		_, err := sr.Seek(0, io.SeekEnd)
+// drain reads whatever of the block's declared length its body left, and
+// reports io.ErrUnexpectedEOF when the stream ends before the block does.
+func (block *Block) drain() error {
+	limited, ok := block.lr.(*io.LimitedReader)
+	if !ok {
+		return nil
+	}
 
+	remaining := limited.N
+	if remaining == 0 {
+		return nil
+	}
+
+	n, err := io.Copy(io.Discard, limited)
+	if err != nil {
 		return err
 	}
 
-	_, err := io.Copy(io.Discard, block.lr)
+	if n < remaining {
+		return io.ErrUnexpectedEOF
+	}
 
-	return err
+	return nil
 }
 
 // A Header contains information about the type and length of a metadata block.
