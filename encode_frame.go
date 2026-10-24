@@ -99,9 +99,14 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	enc.nsamples += uint64(nsamplesPerChannel)
 
 	blockSize := uint16(nsamplesPerChannel)
-	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
-		enc.blockSizeMin = blockSize
+
+	// The frame before this one is no longer the last: its size joins the
+	// minimum, which excludes the last block.
+	if prev := enc.lastBlockSize; prev != 0 && (enc.blockSizeMin == 0 || prev < enc.blockSizeMin) {
+		enc.blockSizeMin = prev
 	}
+
+	enc.lastBlockSize = blockSize
 
 	if enc.blockSizeMax == 0 || blockSize > enc.blockSizeMax {
 		enc.blockSizeMax = blockSize
