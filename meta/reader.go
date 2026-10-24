@@ -1,27 +1,56 @@
 package meta
 
-import "io"
+import (
+	"bytes"
+	"errors"
+	"io"
+)
 
-// readString reads and returns exactly n bytes from the provided io.Reader.
-//
-// The error is io.EOF only if no bytes were read. If an io.EOF happens after
-// reading some but not all the bytes, ReadFull returns io.ErrUnexpectedEOF. On
-// return, n == len(buf) if and only if err == nil.
+// stackBufSize is the string length read through a stack buffer; longer
+// strings are read into a buffer that grows as bytes arrive.
+const stackBufSize = 4096
+
+// readString reads a string of n bytes. A length beyond the stack buffer is
+// not allocated up front: the buffer grows with the bytes read, so a stream
+// that ends before the string does costs what it held, not what n claimed.
 func readString(r io.Reader, n int) (string, error) {
-	// readBuf is the local buffer used by readBytes.
-	var backingArray [4096]byte // hopefully allocated on stack.
+	if n <= stackBufSize {
+		var backingArray [stackBufSize]byte // hopefully allocated on stack.
 
-	readBuf := backingArray[:]
-	if n > len(readBuf) {
-		// The local buffer is initially 4096 bytes and will grow automatically if
-		// so required.
-		readBuf = make([]byte, n)
+		readBuf := backingArray[:n]
+
+		if _, err := io.ReadFull(r, readBuf); err != nil {
+			return "", err
+		}
+
+		return string(readBuf), nil
 	}
 
-	_, err := io.ReadFull(r, readBuf[:n])
+	buf, err := readGrowing(r, int64(n))
 	if err != nil {
 		return "", err
 	}
 
-	return string(readBuf[:n]), nil
+	return string(buf), nil
+}
+
+// readGrowing reads exactly n bytes into a buffer that grows as they arrive,
+// returning io.ErrUnexpectedEOF when the reader ends first.
+func readGrowing(r io.Reader, n int64) ([]byte, error) {
+	var buf bytes.Buffer
+
+	got, err := io.CopyN(&buf, r, n)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, io.ErrUnexpectedEOF
+		}
+
+		return nil, err
+	}
+
+	if got < n {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	return buf.Bytes(), nil
 }

@@ -166,6 +166,11 @@ var (
 	// ErrNoSeektable reports that no seektable has been generated. Therefore,
 	// it is not possible to seek in the stream.
 	ErrNoSeektable = errors.New("stream.searchFromStart: no seektable exists")
+
+	// ErrFirstBlockNotStreamInfo is returned by every constructor for a
+	// stream whose first metadata block is not a STREAMINFO, on its
+	// header's type and before its body is parsed.
+	ErrFirstBlockNotStreamInfo = errors.New("flac: the first metadata block is not a STREAMINFO")
 )
 
 const (
@@ -206,8 +211,21 @@ func (stream *Stream) parseStreamInfo() (block *meta.Block, err error) {
 	}
 
 	// Parse StreamInfo metadata block.
-	block, err = meta.Parse(r)
-	if err != nil {
+	// The first block's header is read before its body: a first block that
+	// is not a STREAMINFO is refused on its type, not parsed, so no other
+	// parser sizes an allocation from it.
+	// A reserved type is still a header read, and not a STREAMINFO: the
+	// type check answers for it; any other error, or no block, is returned.
+	block, err = meta.New(r)
+	if err != nil && (block == nil || !errors.Is(err, meta.ErrReservedType)) {
+		return block, err
+	}
+
+	if block.Type != meta.TypeStreamInfo {
+		return block, fmt.Errorf("%w: got %v", ErrFirstBlockNotStreamInfo, block.Type)
+	}
+
+	if err = block.Parse(); err != nil {
 		return block, err
 	}
 

@@ -6,7 +6,12 @@ import (
 	"fmt"
 )
 
-const maxSeekPoints = 1000000
+const (
+	maxSeekPoints = 1000000
+	// initialSeekPoints is the capacity a seek table starts with: a block's
+	// declared length sizes nothing before its bytes arrive.
+	initialSeekPoints = 256
+)
 
 // SeekTable contains one or more pre-calculated audio frame seek points.
 //
@@ -29,23 +34,27 @@ func (block *Block) parseSeekTable() error {
 		return fmt.Errorf("meta.parseSeekTable: %w, number of seekpoints: %d", ErrDeclaredBlockTooBig, n)
 	}
 
-	table := &SeekTable{Points: make([]SeekPoint, n)}
+	// The points are appended as they are read, so a block cut short in the
+	// stream allocates what it holds, not what its length declares.
+	table := &SeekTable{Points: make([]SeekPoint, 0, min(n, initialSeekPoints))}
 	block.Body = table
 
 	var prev uint64
 
-	for i := range table.Points {
-		point := &table.Points[i]
+	for idx := range n {
+		var point SeekPoint
 
-		err := binary.Read(block.lr, binary.BigEndian, point)
+		err := binary.Read(block.lr, binary.BigEndian, &point)
 		if err != nil {
 			return unexpected(err)
 		}
+
+		table.Points = append(table.Points, point)
 		// Seek points within a table must be sorted in ascending order by sample
 		// number. Each seek point must have a unique sample number, except for
 		// placeholder points.
 		sampleNum := point.SampleNum
-		if i != 0 && sampleNum != PlaceholderPoint {
+		if idx != 0 && sampleNum != PlaceholderPoint {
 			switch {
 			case sampleNum < prev:
 				return fmt.Errorf(
