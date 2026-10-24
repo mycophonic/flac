@@ -93,7 +93,13 @@ func (b *ReadSeeker) Read(p []byte) (n int, err error) {
 				panic(errNegativeRead)
 			}
 
-			b.pos += int64(n)
+			// The buffer now describes nothing: its bytes are behind the
+			// read, and Seek's within-buffer window must not serve them.
+			// pos moves to the read's end, which position() reports with
+			// r at 0.
+			b.pos += int64(b.r) + int64(n)
+			b.r = 0
+			b.w = 0
 
 			return n, b.readErr()
 		}
