@@ -248,6 +248,7 @@ func TestHostileFramesAgainstTheReference(t *testing.T) {
 		{"block size code 0000 (reserved)", func(h *hostileFrame) { h.blockSizeCode = 0 }, true},
 		{"block size 65536", func(h *hostileFrame) { h.blockSizeCode, h.blockSizeExtra = 7, 0xFFFF }, true},
 		{"sample rate code 1111 (invalid)", func(h *hostileFrame) { h.sampleRateCode = 15 }, true},
+		{"sample rate 32 kHz against STREAMINFO's 44.1", func(h *hostileFrame) { h.sampleRateCode = 8 }, true},
 		{"channel assignment 1011 (reserved)", func(h *hostileFrame) { h.channelCode = 11 }, true},
 		{"channel assignment 1111 (reserved)", func(h *hostileFrame) { h.channelCode = 15 }, true},
 		{"sample size 011 (reserved)", func(h *hostileFrame) { h.bpsCode = 3 }, true},
