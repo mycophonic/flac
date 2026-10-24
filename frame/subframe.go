@@ -33,6 +33,9 @@ type Subframe struct {
 	partitionsBuf []RicePartition
 	// verbatimBuf holds raw bytes for aligned verbatim decoding (grow-only).
 	verbatimBuf []byte
+	// wideBuf holds the samples of a subframe wider than 32 bits until
+	// Correlate (grow-only).
+	wideBuf []int64
 }
 
 // parseSubframeInto reads and parses the header, and the audio samples of a
@@ -42,11 +45,13 @@ func (frame *Frame) parseSubframeInto(br *bits.Reader, bps uint, samples []int32
 	// Save reusable buffers before reset.
 	partitionsBuf := subframe.partitionsBuf
 	verbatimBuf := subframe.verbatimBuf
+	wideBuf := subframe.wideBuf
 
 	// Reset subframe for reuse, then restore reusable buffers.
 	*subframe = Subframe{}
 	subframe.partitionsBuf = partitionsBuf
 	subframe.verbatimBuf = verbatimBuf
+	subframe.wideBuf = wideBuf
 
 	// Parse subframe header.
 	if err := subframe.parseHeader(br); err != nil {
