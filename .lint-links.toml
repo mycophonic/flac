@@ -1,0 +1,13 @@
+# This project's exclusions, merged with .limen/lychee.toml's by the
+# `security links` recipe.
+
+exclude = [
+  # ONBOARDING BACKLOG, like .lint-go.yaml's: links found dead at enrolment,
+  # exempted so it lands green. All three are in meta/testdata/README.md,
+  # upstream's licence notes for the test files. git.xiph.org no longer
+  # answers, and pdpics.com returns 404 for the photo page. Alignment replaces
+  # each with a live source and removes its entry.
+  '^https://git\.xiph\.org/\?p=flac\.git$',
+  '^https://git\.xiph\.org/\?p=flac\.git;a=blob_plain;f=COPYING\.Xiph$',
+  '^http://www\.pdpics\.com/photo/2546-silence-word-magnified/$',
+]
