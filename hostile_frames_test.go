@@ -67,6 +67,7 @@ type hostileFrame struct {
 	framePad             uint64 // bits before the CRC-16, zero normally
 	crc16                *uint16
 	streamBPS            uint8
+	channels             uint64 // STREAMINFO's channel count; 1 unless set
 	streamMinMax         uint16
 }
 
@@ -101,7 +102,7 @@ func (h hostileFrame) build() []byte {
 	meta.put(0, 24) // min frame size unknown
 	meta.put(0, 24)
 	meta.put(44100, 20)
-	meta.put(0, 3) // 1 channel
+	meta.put(max(h.channels, 1)-1, 3) // channels
 	meta.put(uint64(h.streamBPS-1), 5)
 	meta.put(16, 36) // 16 samples
 	meta.bytes(make([]byte, 16))
@@ -313,6 +314,68 @@ func TestHostileFramesAgainstTheReference(t *testing.T) {
 				s.put(0, 4)
 				s.put(0, 4)
 				s.put(1, 1) // one residual of 0 under Rice parameter 0
+			}
+		}, true},
+		// The 33-bit side channel of a 32-bit mid/side frame decodes on the
+		// wide path, which refuses the same two subframes: the mid is 16
+		// verbatim samples, the side's header follows in the body.
+		{"LPC order 20 on the 33-bit side of a 16-sample mid/side block", func(h *hostileFrame) {
+			h.streamBPS, h.bpsCode, h.channels, h.channelCode = 32, 7, 2, 10
+			h.body = func(s *bitSink) {
+				for range 16 {
+					s.put(0, 32) // the mid, verbatim
+				}
+
+				s.put(0, 1)     // the side's padding bit
+				s.put(32+19, 6) // LPC order 20
+				s.put(0, 1)     // no wasted bits
+				wideBody(s)
+			}
+		}, true},
+		// 33 wasted bits at the side's 33-bit depth leave a 0-bit sample: the
+		// verbatim samples read nothing, the frame aligns and its CRC holds,
+		// so the decoder accepted it where the reference refuses it.
+		{"33 wasted bits on the 33-bit side of a 16-sample mid/side block", func(h *hostileFrame) {
+			h.streamBPS, h.bpsCode, h.channels, h.channelCode = 32, 7, 2, 10
+			h.body = func(s *bitSink) {
+				for range 16 {
+					s.put(0, 32)
+				}
+
+				s.put(0, 1)  // padding bit
+				s.put(1, 6)  // verbatim
+				s.put(1, 1)  // wasted bits follow
+				s.put(0, 32) // unary: 33 wasted bits
+				s.put(1, 1)  // the terminator; nothing follows, each sample is 0 bits
+			}
+		}, true},
+		// The order boundary on the wide path: 16 on 16 is refused as on the
+		// narrow one (the reference refuses it), the body otherwise whole.
+		{"LPC order 16 on the 33-bit side of a 16-sample mid/side block, equal", func(h *hostileFrame) {
+			h.streamBPS, h.bpsCode, h.channels, h.channelCode = 32, 7, 2, 10
+			h.body = func(s *bitSink) {
+				for range 16 {
+					s.put(0, 32) // the mid, verbatim
+				}
+
+				s.put(0, 1)     // padding bit
+				s.put(32+15, 6) // LPC order 16
+				s.put(0, 1)     // no wasted bits
+
+				for range 16 {
+					s.put(0, 33) // warm-up samples at the side's depth
+				}
+
+				s.put(14, 4) // coefficient precision 15
+				s.put(0, 5)  // shift
+
+				for range 16 {
+					s.put(0, 15) // coefficients
+				}
+
+				s.put(0, 2) // rice1
+				s.put(0, 4) // partition order 0
+				s.put(0, 4) // Rice parameter; no residuals follow
 			}
 		}, true},
 		{"LPC order 20 on a 16-sample block", func(h *hostileFrame) {
