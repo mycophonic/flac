@@ -442,6 +442,10 @@ func (stream *Stream) Next() (f *frame.Frame, err error) {
 		f.BitsPerSample = stream.Info.BitsPerSample
 	}
 
+	if err = stream.checkSampleRate(f); err != nil {
+		return nil, err
+	}
+
 	// Validate running sample count against StreamInfo.NSamples.
 	// See ParseNext() for detailed rationale.
 	stream.samplesDecoded += uint64(f.BlockSize)
@@ -485,6 +489,10 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 		f.BitsPerSample = stream.Info.BitsPerSample
 	}
 
+	if err = stream.checkSampleRate(f); err != nil {
+		return nil, err
+	}
+
 	// Now parse subframes with the resolved header.
 	if err = f.ParseReuse(stream.samplesBuf, stream.subframeBuf); err != nil {
 		return f, err
@@ -509,6 +517,23 @@ func (stream *Stream) ParseNext() (f *frame.Frame, err error) {
 	}
 
 	return f, nil
+}
+
+// checkSampleRate holds a frame's sample rate to STREAMINFO's, as the channel
+// count and the bit depth are held: a stream whose rate changes mid-way would
+// otherwise play at the wrong rate from a caller sized by STREAMINFO, where
+// the reference decoder refuses the file. A frame whose rate code defers to
+// STREAMINFO carries 0 here, which is not a mismatch.
+func (stream *Stream) checkSampleRate(f *frame.Frame) error {
+	if f.SampleRate != 0 && f.SampleRate != stream.Info.SampleRate {
+		return fmt.Errorf(
+			"flac.Stream: sample rate mismatch; frame has %d Hz, STREAMINFO has %d",
+			f.SampleRate,
+			stream.Info.SampleRate,
+		)
+	}
+
+	return nil
 }
 
 // validateSampleCount returns an error if the running total of decoded samples
