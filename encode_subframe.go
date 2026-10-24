@@ -31,6 +31,14 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 		)
 	}
 
+	if err := checkPredictor(subframe); err != nil {
+		return err
+	}
+
+	if err := checkSampleRange(subframe.Samples, bps); err != nil {
+		return err
+	}
+
 	if err := encodeSubframeHeader(bw, subframe.SubHeader); err != nil {
 		return err
 	}
@@ -77,6 +85,74 @@ func encodeSubframe(bw *bitio.Writer, hdr frame.Header, subframe *frame.Subframe
 }
 
 // --- [ Subframe header ] -----------------------------------------------------
+
+// Predictor limits: the fields a predictor subframe carries and the stream
+// can hold, a
+// coefficient precision of 1 to 15 bits (the 4-bit field holds precision-1,
+// 1111 reserved) and a shift of at most 15 (a 5-bit signed field; this
+// writer takes no negative shift, getLPCResiduals refuses one, as it
+// refuses a coefficient count other than the order), and the Rice
+// partitions the residuals are coded in.
+const (
+	minCoeffPrec  = 1
+	maxCoeffPrec  = 15
+	maxCoeffShift = 15
+)
+
+var (
+	errCoeffPrec        = errors.New("invalid coefficient precision; must be 1 to 15 bits")
+	errCoeffShift       = errors.New("invalid coefficient shift; must be at most 15")
+	errNoRicePartitions = errors.New("a predictor subframe needs its Rice partitions: analysis, or RiceSubframe")
+)
+
+var errSampleRange = errors.New("sample beyond the subframe's bit depth")
+
+// checkSampleRange refuses a sample the subframe's depth cannot carry: it
+// was written truncated and hashed as written, a stream the reference
+// accepts whose content is not what the caller passed. The depth is the
+// subframe's, a side channel's one bit wider than the frame's.
+func checkSampleRange(samples []int32, bps uint) error {
+	if bps >= 32 {
+		return nil // every int32 fits
+	}
+
+	limit := int32(1) << (bps - 1)
+	for i, sample := range samples {
+		if sample < -limit || sample >= limit {
+			return fmt.Errorf("%w: sample %d is %d at %d bits", errSampleRange, i, sample, bps)
+		}
+	}
+
+	return nil
+}
+
+// checkPredictor refuses a fixed or FIR subframe whose fields the stream
+// cannot carry, or that has no Rice partitions to code its residuals in:
+// each wrote a stream the reference decoder refuses, or dereferenced nil.
+func checkPredictor(subframe *frame.Subframe) error {
+	switch subframe.Pred {
+	case frame.PredConstant, frame.PredVerbatim:
+		return nil
+	case frame.PredFixed, frame.PredFIR:
+		if subframe.RiceSubframe == nil {
+			return errNoRicePartitions
+		}
+	}
+
+	if subframe.Pred != frame.PredFIR {
+		return nil
+	}
+
+	if subframe.CoeffPrec < minCoeffPrec || subframe.CoeffPrec > maxCoeffPrec {
+		return fmt.Errorf("%w: %d", errCoeffPrec, subframe.CoeffPrec)
+	}
+
+	if subframe.CoeffShift > maxCoeffShift {
+		return fmt.Errorf("%w: %d", errCoeffShift, subframe.CoeffShift)
+	}
+
+	return nil
+}
 
 // encodeSubframeHeader encodes the given subframe header, writing to bw.
 func encodeSubframeHeader(bw *bitio.Writer, subHdr frame.SubHeader) error {

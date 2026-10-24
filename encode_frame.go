@@ -16,8 +16,16 @@ import (
 
 // --- [ Frame ] ---------------------------------------------------------------
 
+// wideBitsPerSample is the depth whose decorrelated side channel would not
+// fit the int32 samples.
+const wideBitsPerSample = 32
+
 // WriteFrame encodes the given audio frame to the output stream. The Num field
 // of the frame header is automatically calculated by the encoder.
+//
+// WriteFrame sets f.Num to the frame's number in the stream, and writes a
+// 32-bit frame asked for with a decorrelated assignment as independent
+// channels, setting f.Channels to ChannelsLR.
 func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// Sanity checks.
 	nchannels := int(enc.Info.NChannels)
@@ -66,10 +74,20 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 		return fmt.Errorf("channel count mismatch; expected %d, got %d", nchannels, f.Channels.Count())
 	}
 
+	// A decorrelated 32-bit frame's side channel is 33 bits, which the
+	// int32 samples cannot hold: Decorrelate would wrap it, and the stream
+	// would decode to other samples than the caller's. The channels are
+	// written independently instead, which is lossless; the header the
+	// stream carries says so.
+	if f.BitsPerSample == wideBitsPerSample && f.Channels.Decorrelated() {
+		f.Channels = frame.ChannelsLR
+	}
+
 	// Create a new CRC-16 hash writer which adds the data from all write
 	// operations to a running hash.
 	h := crc16.NewIBM()
-	hw := io.MultiWriter(h, enc.w)
+	counted := &countingWriter{w: enc.w}
+	hw := io.MultiWriter(h, counted)
 
 	// Encode frame header.
 	f.Num = enc.curNum
@@ -82,9 +100,14 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	enc.nsamples += uint64(nsamplesPerChannel)
 
 	blockSize := uint16(nsamplesPerChannel)
-	if enc.blockSizeMin == 0 || blockSize < enc.blockSizeMin {
-		enc.blockSizeMin = blockSize
+
+	// The frame before this one is no longer the last: its size joins the
+	// minimum, which excludes the last block.
+	if prev := enc.lastBlockSize; prev != 0 && (enc.blockSizeMin == 0 || prev < enc.blockSizeMin) {
+		enc.blockSizeMin = prev
 	}
+
+	enc.lastBlockSize = blockSize
 
 	if enc.blockSizeMax == 0 || blockSize > enc.blockSizeMax {
 		enc.blockSizeMax = blockSize
@@ -147,8 +170,35 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// everything before the crc, back to and including the frame header sync
 	// code.
 	crc := h.Sum16()
+	if err := binary.Write(counted, binary.BigEndian, crc); err != nil {
+		return err
+	}
 
-	return binary.Write(enc.w, binary.BigEndian, crc)
+	// STREAMINFO's frame sizes are the smallest and largest frame written,
+	// header to CRC.
+	size := uint32(counted.n) // #nosec G115 -- a frame is at most a few MB
+	if enc.frameSizeMin == 0 || size < enc.frameSizeMin {
+		enc.frameSizeMin = size
+	}
+
+	if size > enc.frameSizeMax {
+		enc.frameSizeMax = size
+	}
+
+	return nil
+}
+
+// countingWriter counts the bytes written through it.
+type countingWriter struct {
+	w io.Writer
+	n int
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += n
+
+	return n, err
 }
 
 // --- [ Frame header ] --------------------------------------------------------
@@ -465,8 +515,10 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	var bits uint64
 
 	switch bps {
-	case 0:
-		// 000 : get from STREAMINFO metadata block
+	case 0, 4:
+		// 000 : get from STREAMINFO metadata block. A 4-bit sample size
+		// has no code of its own (RFC 9639, section 9.1.4): STREAMINFO
+		// carries it and the header defers to it.
 		bits = 0x0
 	case 8:
 		// 001 : 8 bits per sample
