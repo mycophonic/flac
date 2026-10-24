@@ -487,8 +487,10 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	var bits uint64
 
 	switch bps {
-	case 0:
-		// 000 : get from STREAMINFO metadata block
+	case 0, 4:
+		// 000 : get from STREAMINFO metadata block. A 4-bit sample size
+		// has no code of its own (RFC 9639, section 9.1.4): STREAMINFO
+		// carries it and the header defers to it.
 		bits = 0x0
 	case 8:
 		// 001 : 8 bits per sample
