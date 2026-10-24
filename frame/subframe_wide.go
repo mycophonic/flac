@@ -34,7 +34,9 @@ var (
 	errWideCoeffCount = errors.New(
 		"frame.Subframe.decodeLPCWide: prediction order differs from the number of coefficients",
 	)
-	errWideShift = errors.New("frame.Subframe.decodeLPCWide: invalid negative shift")
+	errWideShift  = errors.New("frame.Subframe.decodeLPCWide: invalid negative shift")
+	errWideWasted = errors.New("frame.Subframe.parseSubframeWideInto: wasted bits at or above the depth")
+	errWideOrder  = errors.New("frame.Subframe.parseSubframeWideInto: predictor order not below the block size")
 )
 
 // parseSubframeWideInto parses a subframe whose samples exceed 32 bits into
@@ -54,9 +56,23 @@ func (frame *Frame) parseSubframeWideInto(reader *bits.Reader, bps uint, samples
 		return err
 	}
 
+	// The two refusals of parseSubframeInto, mirrored: the wasted-bits count
+	// is below the depth (RFC 9639, section 9.2.2), else the depth is zero
+	// at the count and wraps above it; and the predictor order is below the
+	// block size, else the warm-up loops index past the block (the reference
+	// refuses both).
+	if subframe.Wasted >= bps {
+		return fmt.Errorf("%w: %d wasted bits at or above the %d-bit depth", errWideWasted, subframe.Wasted, bps)
+	}
+
 	bps -= subframe.Wasted
 
 	subframe.NSamples = int(frame.BlockSize)
+
+	if subframe.Order >= subframe.NSamples {
+		return fmt.Errorf("%w: order %d, block size %d", errWideOrder, subframe.Order, subframe.NSamples)
+	}
+
 	subframe.Samples = samples[:subframe.NSamples]
 
 	// The wide samples live on the subframe, which ParseReuse keeps across
