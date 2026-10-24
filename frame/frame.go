@@ -54,6 +54,10 @@ type Frame struct {
 	// Samples slice points into this buffer. Allocated once per frame to
 	// avoid per-subframe allocations.
 	samplesBuf []int32
+	// wide holds the samples of a subframe wider than 32 bits, the side
+	// channel of a 32-bit stream, until Correlate: the subframe's wide
+	// buffer, nil when no subframe of this frame decoded wide.
+	wide []int64
 }
 
 // New creates a new Frame for accessing the audio samples via the provided bit
@@ -165,6 +169,7 @@ func (frame *Frame) parseInto(samplesBuf []int32, subframes []*Subframe) error {
 // Subframes slice and samplesBuf must already be set up before calling.
 func (frame *Frame) parseSubframes() error {
 	nChannels := frame.Channels.Count()
+	frame.wide = nil
 
 	blockSize := int(frame.BlockSize)
 	for channel := range nChannels {
@@ -187,6 +192,15 @@ func (frame *Frame) parseSubframes() error {
 		// Slice the contiguous sample buffer for this channel's subframe.
 		off := channel * blockSize
 		samples := frame.samplesBuf[off : off : off+blockSize]
+
+		// A side channel of a 32-bit stream carries 33 bits: decode it wide.
+		if bps > wideBitsPerSample {
+			if err := frame.parseSubframeWideInto(frame.br, bps, samples, frame.Subframes[channel]); err != nil {
+				return err
+			}
+
+			continue
+		}
 
 		// Parse subframe into the pre-allocated struct.
 		if err := frame.parseSubframeInto(frame.br, bps, samples, frame.Subframes[channel]); err != nil {
@@ -799,6 +813,12 @@ func (channels Channels) Count() int {
 //	mid = (left + right)/2
 //	side = left - right
 func (frame *Frame) Correlate() {
+	if frame.wide != nil {
+		frame.correlateWide()
+
+		return
+	}
+
 	switch frame.Channels {
 	case ChannelsLeftSide:
 		// 2 channels: left, side; using inter-channel decorrelation.
