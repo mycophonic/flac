@@ -1,10 +1,16 @@
 package utf8
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/mycophonic/flac/internal/ioutilx"
 )
+
+// errBeyondRange is returned by Encode for a number the coding's 36 bits
+// cannot carry (RFC 9639, section 9.1.5).
+var errBeyondRange = errors.New("frame.encodeUTF8Int: number exceeds the coding's 36-bit range")
 
 // Encode encodes x as a "UTF-8" coded number.
 func Encode(w io.Writer, x uint64) error {
@@ -59,6 +65,8 @@ func Encode(w io.Writer, x uint64) error {
 		// 6 continuation bytes.
 		l = 6
 		bits = t7
+	default:
+		return fmt.Errorf("%w: %d", errBeyondRange, x)
 	}
 	// Store bits of c0.
 	if err := ioutilx.WriteByte(w, byte(bits)); err != nil {
