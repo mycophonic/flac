@@ -86,7 +86,8 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// Create a new CRC-16 hash writer which adds the data from all write
 	// operations to a running hash.
 	h := crc16.NewIBM()
-	hw := io.MultiWriter(h, enc.w)
+	counted := &countingWriter{w: enc.w}
+	hw := io.MultiWriter(h, counted)
 
 	// Encode frame header.
 	f.Num = enc.curNum
@@ -169,8 +170,35 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// everything before the crc, back to and including the frame header sync
 	// code.
 	crc := h.Sum16()
+	if err := binary.Write(counted, binary.BigEndian, crc); err != nil {
+		return err
+	}
 
-	return binary.Write(enc.w, binary.BigEndian, crc)
+	// STREAMINFO's frame sizes are the smallest and largest frame written,
+	// header to CRC.
+	size := uint32(counted.n) // #nosec G115 -- a frame is at most a few MB
+	if enc.frameSizeMin == 0 || size < enc.frameSizeMin {
+		enc.frameSizeMin = size
+	}
+
+	if size > enc.frameSizeMax {
+		enc.frameSizeMax = size
+	}
+
+	return nil
+}
+
+// countingWriter counts the bytes written through it.
+type countingWriter struct {
+	w io.Writer
+	n int
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += n
+
+	return n, err
 }
 
 // --- [ Frame header ] --------------------------------------------------------
