@@ -248,10 +248,10 @@ func signExtend(x uint64, n uint) int32 {
 	// x is signed if its most significant bit is set.
 	if x&(1<<(n-1)) != 0 {
 		// Sign extend x.
-		return int32(x | ^uint64(0)<<n) //nolint:gosec // value bounded by bit-field width just read from the stream
+		return int32(x | ^uint64(0)<<n) // #nosec G115 -- value bounded by bit-field width just read from the stream
 	}
 
-	return int32(x) //nolint:gosec // value bounded by bit-field width just read from the stream
+	return int32(x) // #nosec G115 -- value bounded by bit-field width just read from the stream
 }
 
 // decodeConstant reads an unencoded audio sample of the subframe. Each sample
@@ -300,7 +300,7 @@ func (subframe *Subframe) decodeVerbatim(br *bits.Reader, bps uint) error {
 // decodeVerbatimAligned reads verbatim samples in bulk for byte-aligned bit
 // depths. All bytes are read in a single I/O call, then unpacked into samples.
 func (subframe *Subframe) decodeVerbatimAligned(br *bits.Reader, bps uint) error {
-	bytesPerSample := int(bps / 8) //nolint:gosec // value bounded by FLAC spec field width (bps <= 32, k <= 14)
+	bytesPerSample := int(bps / 8)
 	needed := subframe.NSamples * bytesPerSample
 	// Reuse the grow-only verbatim buffer across frames.
 	if cap(subframe.verbatimBuf) < needed {
@@ -485,7 +485,7 @@ func (subframe *Subframe) decodeResiduals(br *bits.Reader) error {
 		return unexpected(err)
 	}
 
-	residualCodingMethod := ResidualCodingMethod( //nolint:gosec // value bounded by bit-field width just read from the stream
+	residualCodingMethod := ResidualCodingMethod( // #nosec G115 -- value bounded by bit-field width just read from the stream
 		x,
 	)
 	subframe.ResidualCodingMethod = residualCodingMethod
@@ -519,7 +519,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 		return unexpected(err)
 	}
 
-	partOrder := int(x) //nolint:gosec // value bounded by bit-field width just read from the stream
+	partOrder := int(x) // #nosec G115 -- value bounded by bit-field width just read from the stream
 
 	// FLAC spec: block_size must be evenly divisible by 2^partition_order, and
 	// block_size / (2^partition_order) must be >= predictor_order. Violating
@@ -611,7 +611,7 @@ func (subframe *Subframe) decodeRicePart(br *bits.Reader, paramSize uint) error 
 				// complement.  For example, when a partition is escaped and each
 				// residual sample is stored with 3 bits, the number -1 is
 				// represented as 0b111.
-				subframe.Samples[sIdx] = int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+				subframe.Samples[sIdx] = int32( // #nosec G115 -- int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
 					bits.IntN(sample, n),
 				)
 				sIdx++
@@ -665,7 +665,7 @@ func (subframe *Subframe) decodeLPC(coeffs []int32, shift int32) error {
 			sample += int64(c) * int64(subframe.Samples[i-j-1])
 		}
 
-		subframe.Samples[i] += int32( //nolint:gosec // int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
+		subframe.Samples[i] += int32( // #nosec G115 -- int64 intermediate fits in int32 for valid FLAC samples (bps<=32)
 			sample >> uint(shift),
 		)
 	}

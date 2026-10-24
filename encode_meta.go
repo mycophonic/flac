@@ -253,7 +253,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	if err := binary.Write(
 		bw,
 		binary.LittleEndian,
-		uint32(len(comment.Vendor)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+		uint32(len(comment.Vendor)), // #nosec G115 -- len bounded by FLAC metadata block length (max 16MB)
 	); err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 	if err := binary.Write(
 		bw,
 		binary.LittleEndian,
-		uint32(len(comment.Tags)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+		uint32(len(comment.Tags)), // #nosec G115 -- len bounded by FLAC metadata block length (max 16MB)
 	); err != nil {
 		return err
 	}
@@ -279,7 +279,7 @@ func encodeVorbisComment(bw *bitio.Writer, comment *meta.VorbisComment, last boo
 		if err := binary.Write(
 			bw,
 			binary.LittleEndian,
-			uint32(len(buf)), //nolint:gosec // len bounded by FLAC metadata block length (max 16MB)
+			uint32(len(buf)), // #nosec G115 -- len bounded by FLAC metadata block length (max 16MB)
 		); err != nil {
 			return err
 		}

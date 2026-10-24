@@ -105,7 +105,7 @@ func (d *digest) Sum16() uint16 {
 func (d *digest) Sum(in []byte) []byte {
 	s := d.Sum16()
 
-	return append(in, byte(s>>8), byte(s)) //nolint:gosec // bounded by FLAC spec field constraints
+	return append(in, byte(s>>8), byte(s)) // #nosec G115 -- bounded by FLAC spec field constraints
 }
 
 // Checksum returns the CRC-16 checksum of data, using the polynomial

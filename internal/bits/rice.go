@@ -47,7 +47,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 			}
 
 			if err = br.needBytes(
-				int(nBytes), //nolint:gosec // nBytes bounded by FLAC spec field width (k<=32)
+				int(nBytes),
 			); err != nil {
 				return 0, err
 			}
@@ -91,7 +91,7 @@ func (br *Reader) ReadRice(k uint) (int32, error) {
 	}
 
 	// Phase 3: combine and ZigZag decode inline.
-	folded := uint32(high<<k | low) //nolint:gosec // value bounded by bit-field width just read from the stream
+	folded := uint32(high<<k | low) // #nosec G115 -- value bounded by bit-field width just read from the stream
 
 	return int32(folded>>1) ^ -int32(folded&1), nil
 }
