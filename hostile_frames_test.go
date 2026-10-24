@@ -256,6 +256,10 @@ func TestHostileFramesAgainstTheReference(t *testing.T) {
 		// decoder refuses it. The reference is logged, not imposed.
 		{"frame number overlong (C0 80 for 0)", func(h *hostileFrame) { h.number = []byte{0xC0, 0x80} }, false},
 		{"frame number with a bad continuation", func(h *hostileFrame) { h.number = []byte{0xC2, 0x00} }, true},
+		{"frame number lead byte 0xFF", func(h *hostileFrame) { h.number = []byte{0xFF} }, true},
+		{"frame number lead byte 0xFF with continuations", func(h *hostileFrame) {
+			h.number = []byte{0xFF, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80}
+		}, true},
 		{"frame number of 7 bytes in a fixed-blocksize frame", func(h *hostileFrame) {
 			h.number = []byte{0xFE, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80}
 		}, true},

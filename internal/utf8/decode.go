@@ -111,6 +111,9 @@ func Decode(r io.Reader) (x uint64, err error) {
 		// total: 36 bits (0 + 6 + 6 + 6 + 6 + 6 + 6)
 		l = 6
 		x = 0
+	default:
+		// 11111111 leads nothing in the coding (RFC 9639, section 9.1.5).
+		return 0, errors.New("frame.decodeUTF8Int: invalid lead byte (0xFF)")
 	}
 
 	// store bits from continuation bytes.
