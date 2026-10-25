@@ -6,18 +6,19 @@ import (
 	"io"
 )
 
-// stackBufSize is the string length read through a stack buffer; longer
-// strings are read into a buffer that grows as bytes arrive.
-const stackBufSize = 4096
+// directReadSize is the longest string read into a buffer of its own
+// length; longer strings are read into a buffer that grows as bytes arrive.
+const directReadSize = 4096
 
-// readString reads a string of n bytes. A length beyond the stack buffer is
-// not allocated up front: the buffer grows with the bytes read, so a stream
-// that ends before the string does costs what it held, not what n claimed.
+// readString reads a string of n bytes. A short string costs its length: the
+// buffer is sized to n, not a fixed array meant for the stack, which escaped
+// to the heap through the reader and cost 4 KiB per string however short
+// (#39). A length beyond directReadSize is not allocated up front: the buffer
+// grows with the bytes read, so a stream that ends before the string does
+// costs what it held, not what n claimed.
 func readString(r io.Reader, n int) (string, error) {
-	if n <= stackBufSize {
-		var backingArray [stackBufSize]byte // hopefully allocated on stack.
-
-		readBuf := backingArray[:n]
+	if n <= directReadSize {
+		readBuf := make([]byte, n)
 
 		if _, err := io.ReadFull(r, readBuf); err != nil {
 			return "", err
