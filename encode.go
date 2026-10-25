@@ -74,6 +74,10 @@ func NewEncoder(w io.Writer, info *meta.StreamInfo, blocks ...*meta.Block) (*Enc
 	return enc, nil
 }
 
+// minBlockSize is the smallest block size STREAMINFO may declare (RFC 9639,
+// section 8.2); only the last block of a stream may be shorter.
+const minBlockSize = 16
+
 // Close closes the underlying io.Writer of the encoder and flushes any pending
 // writes. If the io.Writer implements io.Seeker, the encoder will update the
 // StreamInfo metadata block with the MD5 checksum of the unencoded audio
@@ -88,9 +92,19 @@ func (enc *Encoder) Close() error {
 		}
 		// Update minimum and maximum block size (in samples) of FLAC stream.
 		// A stream of one block has no block before the last: its minimum is
-		// its maximum, as the reference encoder writes it.
-		if enc.blockSizeMin == 0 {
+		// its maximum, as the reference encoder writes it. Below 16, the
+		// minimum of RFC 9639 (section 8.2), the block is a last block shorter
+		// than the stream's size and the sizes the encoder was opened with
+		// stand, as the reference encoder writes its configured size; written
+		// as 15..15, the decoder refused the stream at open (#40).
+		switch {
+		case enc.blockSizeMin != 0:
+		case enc.blockSizeMax >= minBlockSize:
 			enc.blockSizeMin = enc.blockSizeMax
+		case enc.Info.BlockSizeMin >= minBlockSize && enc.Info.BlockSizeMax >= enc.Info.BlockSizeMin:
+			enc.blockSizeMin, enc.blockSizeMax = enc.Info.BlockSizeMin, enc.Info.BlockSizeMax
+		default:
+			enc.blockSizeMin, enc.blockSizeMax = minBlockSize, minBlockSize
 		}
 
 		enc.Info.BlockSizeMin = enc.blockSizeMin
