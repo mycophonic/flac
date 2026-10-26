@@ -110,6 +110,9 @@ tags=()
 		abs=$(cd "$abs" && pwd -P)
 		go mod edit -modfile="$build/fork.mod" -replace "github.com/mycophonic/flac=$abs"
 	elif [ -n "$fork_rev" ]; then
+		# go.mod's replace points at the checkout; a fetched revision needs it
+		# gone first.
+		go mod edit -modfile="$build/fork.mod" -dropreplace github.com/mycophonic/flac
 		go get -modfile="$build/fork.mod" "github.com/mycophonic/flac@$fork_rev"
 	fi
 	go build -modfile="$build/fork.mod" -trimpath ${tags[@]+"${tags[@]}"} -o "$build/flacharness" .

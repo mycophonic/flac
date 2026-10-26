@@ -10,9 +10,10 @@ It was written by Arsenie Coseac and the 1-bit bridge team
 into the public domain under the Unlicense (`LICENSE`), and carried here as
 sent, with its paths adjusted to this home and its Go formatted by this
 repository's linters; `just harness` runs it. Its own module keeps upstream
-out of the library's dependency graph. `go test ./...` in this directory
-runs the fuzz targets' seeds against the fork `go.mod` pins, not the
-checkout (`run.sh` builds with a replace directive); the recipes never run
+out of the library's dependency graph, and a replace directive in it points
+the fork at the checkout, so `go test ./...` in this directory runs the fuzz
+targets' seeds against the code around it (the require line is nominal:
+pinned, it had Renovate bumping it after every merge); the recipes never run
 it, and it belongs in no gate.
 
 ## What it checks
