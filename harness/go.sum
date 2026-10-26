@@ -8,5 +8,5 @@ github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d h1:IL2tii4jXLdhCeQN69HN
 github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d/go.mod h1:SIpumAnUWSy0q9RzKD3pyH3g1t5vdawUAPcW5tQrUtI=
 github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985 h1:h8O1byDZ1uk6RUXMhj1QJU3VXFKXHDZxr4TXRPGeBa8=
 github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985/go.mod h1:uiPmbdUbdt1NkGApKl7htQjZ8S7XaGUAVulJUJ9v6q4=
-github.com/mycophonic/flac v1.0.0-rc2.0.20261026045338-09db8b8215e8 h1:ZCq3loyQqwvZWy7L4WuSz8bteXDfs8zz1wSqUxq30GA=
-github.com/mycophonic/flac v1.0.0-rc2.0.20261026045338-09db8b8215e8/go.mod h1:WeGj42l4IklnXQOI3BYX4/6vqwJe9m7NUH6mk2WEeMM=
+github.com/mycophonic/flac v1.0.0-rc2.0.20261026060044-b38c933d73df h1:XzI1+/uLrcQYgectFJ7wyaZbGX5EA9AMJ9FiIz6mPj0=
+github.com/mycophonic/flac v1.0.0-rc2.0.20261026060044-b38c933d73df/go.mod h1:WeGj42l4IklnXQOI3BYX4/6vqwJe9m7NUH6mk2WEeMM=
