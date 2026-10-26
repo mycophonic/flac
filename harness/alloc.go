@@ -47,7 +47,9 @@ func metaBlock(typ byte, last bool, length int, body []byte) []byte {
 	if last {
 		h |= 0x80
 	}
+
 	b := []byte{h, byte(length >> 16), byte(length >> 8), byte(length)}
+
 	return append(b, body...)
 }
 
@@ -61,13 +63,16 @@ func streamInfoBlock() []byte {
 	var b [34]byte
 	binary.BigEndian.PutUint16(b[0:], 4096)
 	binary.BigEndian.PutUint16(b[2:], 4096)
+
 	v := uint64(44100)<<44 | uint64(1)<<41 | uint64(15)<<36
 	binary.BigEndian.PutUint64(b[10:], v)
+
 	return metaBlock(0, false, 34, b[:])
 }
 
 func allocProbes() []allocProbe {
 	const mib = 1 << 20
+
 	ps := []allocProbe{{
 		// The first evaluation's probe: an 8-byte VORBIS_COMMENT block whose
 		// vendor length claims 32 MiB.
@@ -99,6 +104,7 @@ func allocProbes() []allocProbe {
 			allocProbe{"application-" + s, "#25", int64(app), metaBlock(2, true, app, be32(0x74657374))},
 		)
 	}
+
 	ps = append(ps,
 		allocProbe{"vorbis-tag-count-50000", "#25", 50000, metaBlock(4, true, 8, cat(le32(0), le32(50000)))},
 		allocProbe{"padding-16MiB", "#25", 1<<24 - 1, metaBlock(1, true, 1<<24-1, nil)},
@@ -112,15 +118,19 @@ func allocProbes() []allocProbe {
 	for i := 0; i < 2000; i++ {
 		tags = append(tags, cat(le32(3), []byte("a=b"))...)
 	}
+
 	var blocks []byte
+
 	for i := 0; i < 1000; i++ {
 		body := cat(le32(0), le32(1), le32(3), []byte("a=b"))
 		blocks = append(blocks, metaBlock(4, i == 999, len(body), body)...)
 	}
+
 	ps = append(ps,
 		allocProbe{"vorbis-2000-short-tags", "strings", 2001, metaBlock(4, true, len(tags), tags)},
 		allocProbe{"vorbis-1000-blocks", "strings", 2000, blocks},
 	)
+
 	return ps
 }
 
@@ -136,7 +146,9 @@ var allocEntries = []allocEntry{
 			_, err := fmeta.Parse(bytes.NewReader(b))
 			return err
 		}
+
 		_, err := umeta.Parse(bytes.NewReader(b))
+
 		return err
 	}},
 	{"flac.Parse", true, func(dec string, b []byte) error {
@@ -144,7 +156,9 @@ var allocEntries = []allocEntry{
 			_, err := fork.Parse(bytes.NewReader(b))
 			return err
 		}
+
 		_, err := upstream.Parse(bytes.NewReader(b))
+
 		return err
 	}},
 	{"flac.NewSeek", true, func(dec string, b []byte) error {
@@ -152,7 +166,9 @@ var allocEntries = []allocEntry{
 			_, err := fork.NewSeek(bytes.NewReader(b))
 			return err
 		}
+
 		_, err := upstream.NewSeek(bytes.NewReader(b))
+
 		return err
 	}},
 }
@@ -161,8 +177,10 @@ var allocEntries = []allocEntry{
 // runs, and its error or panic.
 func measure(fn func() error) (allocBytes, mallocs uint64, err error, panicked string) {
 	allocBytes, mallocs = ^uint64(0), ^uint64(0)
+
 	for k := 0; k < 3; k++ {
 		runtime.GC()
+
 		var a, z runtime.MemStats
 		runtime.ReadMemStats(&a)
 		func() {
@@ -171,23 +189,27 @@ func measure(fn func() error) (allocBytes, mallocs uint64, err error, panicked s
 					panicked = clip(fmt.Sprint(p), 300) + "\n" + trimStack(debug.Stack())
 				}
 			}()
+
 			err = fn()
 		}()
 		runtime.ReadMemStats(&z)
 		allocBytes = min(allocBytes, z.TotalAlloc-a.TotalAlloc)
 		mallocs = min(mallocs, z.Mallocs-a.Mallocs)
 	}
+
 	return allocBytes, mallocs, err, panicked
 }
 
 func runAllocProbes() []AllocRecord {
 	var recs []AllocRecord
+
 	for _, p := range allocProbes() {
 		for _, e := range allocEntries {
 			in := p.block
 			if e.stream {
 				in = cat([]byte("fLaC"), streamInfoBlock(), p.block)
 			}
+
 			for _, dec := range decoderNames {
 				run := e.run
 				n, m, err, pn := measure(func() error { return run(dec, in) })
@@ -195,14 +217,17 @@ func runAllocProbes() []AllocRecord {
 					Probe: p.name, Issue: p.issue, Entry: e.name, Decoder: dec, InputBytes: len(in),
 					Declared: p.declared, AllocBytes: n, Mallocs: m, Bound: allocBound(len(in)), Panic: pn,
 				}
+
 				r.Bounded = pn == "" && n <= r.Bound
 				if err != nil {
 					r.Error = clip(err.Error(), 200)
 				}
+
 				recs = append(recs, r)
 			}
 		}
 	}
+
 	return recs
 }
 
@@ -210,16 +235,19 @@ func cmdAlloc(args []string) error {
 	fl := flag.NewFlagSet("alloc", flag.ExitOnError)
 	out := fl.String("out", "-", "output, JSON lines")
 	_ = fl.Parse(args)
+
 	w, err := createOut(*out)
 	if err != nil {
 		return err
 	}
 	defer w.Close()
+
 	jl := newJSONLines(w)
 	for _, r := range runAllocProbes() {
 		if err := jl.write(r); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

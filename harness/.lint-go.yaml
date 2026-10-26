@@ -1,0 +1,205 @@
+# The harness module's carve-outs from the Go lint baseline
+# (.limen/lint-go.yaml), in .lint-go.yaml's shape: the root module's overlay
+# does not reach a nested module, so this one is the harness's own, rendered
+# on the same baseline by `limen-lint-go -C harness` (the root .justfile's
+# lint-harness).
+
+licenses:
+  # The baseline's list, restated since `allowed` replaces it, plus the
+  # Unlicense: upstream mewkiz/flac and its mewkiz helpers carry it, and so
+  # does this repository's own module, which the harness imports. The
+  # harness exists to compare the two, so neither dependency can go.
+  allowed:
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - MIT
+    - Unlicense
+
+golangci:
+  linters:
+    exclusions:
+      rules:
+        # ---------------------------------------------------------------------------
+        # ONBOARDING BACKLOG. Not a judgment: these are the findings the baseline
+        # raised on code that predates the harness's lint lanes, exempted so
+        # they land green (book/mandatory-files.md, "Onboarding an existing
+        # repository"), as the root .lint-go.yaml does for the library. Nobody
+        # has read them yet. Alignment empties this block one linter or one
+        # file per pull request, each finding fixed, silenced inline with its
+        # reason, or raised as a rule; the last alignment pull request deletes
+        # the block.
+        # Counts are the measurement when the harness came under the lanes, after
+        # the mechanical fixers ran, per file and linter: 846 in 13 files.
+        # ---------------------------------------------------------------------------
+        - path: ^alloc\.go$
+          linters: # 61 findings
+            - mnd # 16
+            - varnamelen # 14
+            - wrapcheck # 6
+            - depguard # 4
+            - goconst # 4
+            - gosec # 4
+            - intrange # 3
+            - modernize # 3
+            - revive # 3
+            - tagliatelle # 2
+            - errcheck # 1
+            - gochecknoglobals # 1
+        - path: ^build\.go$
+          linters: # 80 findings
+            - gosec # 24
+            - mnd # 24
+            - varnamelen # 13
+            - intrange # 10
+            - modernize # 5
+            - gocognit # 2
+            - gochecknoglobals # 1
+            - gocritic # 1
+        - path: ^build_test\.go$
+          linters: # 4 findings
+            - intrange # 1
+            - modernize # 1
+            - paralleltest # 1
+            - usetesting # 1
+        - path: ^decode\.go$
+          linters: # 72 findings
+            - varnamelen # 18
+            - tagliatelle # 17
+            - goconst # 9
+            - mnd # 6
+            - gosec # 4
+            - errcheck # 3
+            - intrange # 3
+            - err113 # 2
+            - gocognit # 2
+            - modernize # 2
+            - revive # 2
+            - wrapcheck # 2
+            - errorlint # 1
+            - gocritic # 1
+        - path: ^decoders\.go$
+          linters: # 55 findings
+            - wrapcheck # 12
+            - varnamelen # 11
+            - mnd # 8
+            - tagliatelle # 7
+            - goconst # 3
+            - modernize # 3
+            - depguard # 2
+            - err113 # 2
+            - gosec # 2
+            - intrange # 2
+            - errcheck # 1
+            - gochecknoglobals # 1
+            - unused # 1
+        - path: ^fuzz_test\.go$
+          linters: # 8 findings
+            - embeddedstructfieldcheck # 2
+            - modernize # 2
+            - thelper # 2
+            - gochecknoglobals # 1
+            - intrange # 1
+        - path: ^gen\.go$
+          linters: # 252 findings
+            - mnd # 129
+            - gosec # 52
+            - varnamelen # 25
+            - wrapcheck # 22
+            - revive # 5
+            - unparam # 4
+            - gochecknoglobals # 3
+            - noctx # 3
+            - tagliatelle # 3
+            - goconst # 2
+            - err113 # 1
+            - forbidigo # 1
+            - gocognit # 1
+            - perfsprint # 1
+        - path: ^libflac\.go$
+          linters: # 36 findings
+            - gosec # 7
+            - mnd # 6
+            - wrapcheck # 5
+            - varnamelen # 4
+            - tagliatelle # 3
+            - intrange # 2
+            - revive # 2
+            - err113 # 1
+            - errcheck # 1
+            - funcorder # 1
+            - gochecknoglobals # 1
+            - gocognit # 1
+            - modernize # 1
+            - noctx # 1
+        - path: ^main\.go$
+          linters: # 13 findings
+            - varnamelen # 6
+            - mnd # 2
+            - wrapcheck # 2
+            - gosec # 1
+            - revive # 1
+            - tagliatelle # 1
+        - path: ^refdecode\.go$
+          linters: # 84 findings
+            - varnamelen # 22
+            - mnd # 19
+            - err113 # 18
+            - gosec # 10
+            - gocognit # 3
+            - govet # 3
+            - revive # 3
+            - forbidigo # 2
+            - wrapcheck # 2
+            - gochecknoglobals # 1
+            - wastedassign # 1
+        - path: ^seek\.go$
+          linters: # 59 findings
+            - varnamelen # 18
+            - gosec # 9
+            - mnd # 8
+            - goconst # 6
+            - tagliatelle # 5
+            - gocognit # 4
+            - modernize # 3
+            - err113 # 2
+            - depguard # 1
+            - errcheck # 1
+            - intrange # 1
+            - revive # 1
+        - path: ^summary\.go$
+          linters: # 102 findings
+            - varnamelen # 43
+            - goconst # 15
+            - wrapcheck # 7
+            - tagliatelle # 6
+            - gocognit # 5
+            - gosec # 5
+            - revive # 5
+            - mnd # 4
+            - perfsprint # 4
+            - forbidigo # 3
+            - gochecknoglobals # 2
+            - err113 # 1
+            - errcheck # 1
+            - modernize # 1
+        - path: ^triage\.go$
+          linters: # 20 findings
+            - varnamelen # 5
+            - wrapcheck # 4
+            - gosec # 3
+            - mnd # 3
+            - err113 # 2
+            - tagliatelle # 2
+            - errcheck # 1
+
+nilaway:
+  # ONBOARDING BACKLOG, as above: NilAway's findings when the harness came
+  # under the lanes, by the file each is reported in (8: summary.go 4,
+  # seek.go 2, decode.go 1, refdecode.go 1). NilAway has no per-line
+  # suppression; alignment removes each entry.
+  exclude-errors-in-files:
+    - decode.go
+    - refdecode.go
+    - seek.go
+    - summary.go

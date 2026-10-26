@@ -96,7 +96,9 @@ func (c *corpusFlags) Set(v string) error {
 	if !ok || name == "" || dir == "" {
 		return fmt.Errorf("want name=dir, got %q", v)
 	}
+
 	*c = append(*c, struct{ name, dir string }{name, dir})
+
 	return nil
 }
 
@@ -109,63 +111,83 @@ func (f inputFile) path() string { return filepath.Join(f.root, filepath.FromSla
 // listFLAC lists every .flac file under each corpus, sorted.
 func listFLAC(corpora corpusFlags) ([]inputFile, error) {
 	var files []inputFile
+
 	for _, c := range corpora {
 		var here []inputFile
+
 		err := filepath.WalkDir(c.dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
+
 			if d.Type().IsRegular() && strings.EqualFold(filepath.Ext(p), ".flac") {
 				rel, err := filepath.Rel(c.dir, p)
 				if err != nil {
 					return err
 				}
+
 				here = append(here, inputFile{c.name, c.dir, filepath.ToSlash(rel)})
 			}
+
 			return nil
 		})
 		if err != nil {
 			return nil, err
 		}
+
 		sort.Slice(here, func(i, j int) bool { return here[i].rel < here[j].rel })
 		files = append(files, here...)
 	}
+
 	return files, nil
 }
 
 func cmdDecode(args []string) error {
 	fl := flag.NewFlagSet("decode", flag.ExitOnError)
+
 	var corpora corpusFlags
 	fl.Var(&corpora, "corpus", "name=dir: decode every .flac under dir, labelled name (repeatable)")
 	out := fl.String("out", "-", "output, JSON lines")
 	jobs := fl.Int("j", 2, "files decoded at once")
 	timeout := fl.Duration("timeout", 2*time.Minute, "deadline per decoder and file, plus one second per MB")
 	_ = fl.Parse(args)
+
 	if len(corpora) == 0 {
 		return errors.New("decode: no -corpus given")
 	}
+
 	files, err := listFLAC(corpora)
 	if err != nil {
 		return err
 	}
+
 	w, err := createOut(*out)
 	if err != nil {
 		return err
 	}
 	defer w.Close()
+
 	lib := newLibFLAC()
 	results := make([]DecodeRecord, len(files))
 	work := make(chan int)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+
+	var (
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+
 	done := 0
+
 	for k := 0; k < max(1, *jobs); k++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
 			for i := range work {
 				results[i] = decodeOne(lib, files[i], *timeout)
+
 				mu.Lock()
+
 				done++
 				if done%50 == 0 || done == len(files) {
 					fmt.Fprintf(os.Stderr, "decode: %d/%d files\n", done, len(files))
@@ -174,49 +196,63 @@ func cmdDecode(args []string) error {
 			}
 		}()
 	}
+
 	for i := range files {
 		work <- i
 	}
+
 	close(work)
 	wg.Wait()
+
 	jl := newJSONLines(w)
 	for _, r := range results {
 		if err := jl.write(r); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func decodeOne(lib libFLAC, f inputFile, timeout time.Duration) DecodeRecord {
 	rec := DecodeRecord{Corpus: f.corpus, File: f.rel}
+
 	p := f.path()
 	if fh, err := os.Open(p); err == nil {
 		h := sha256.New()
 		n, _ := io.Copy(h, fh)
 		fh.Close()
+
 		rec.Bytes, rec.SHA256 = n, hex.EncodeToString(h.Sum(nil))
 	}
+
 	limit := timeout + time.Duration(rec.Bytes/1e6)*time.Second
+
 	var libs [2]LibResult
+
 	for k, name := range decoderNames {
 		r, lr := compareFile(lib, p, name, limit)
 		r.ParseError, r.NewSeekError = metadataErrors(name, p)
 		libs[k] = lr
+
 		if rec.Info == nil && r.info != nil {
 			rec.Info = r.info
 		}
+
 		if name == "fork" {
 			rec.Fork = r
 		} else {
 			rec.Upstream = r
 		}
 	}
+
 	rec.LibFLAC = libs[0]
 	if libs[0].OK != libs[1].OK || libs[0].Bytes != libs[1].Bytes {
 		rec.LibFLAC.Error += " (libFLAC differed between its two runs)"
 	}
+
 	rec.ForkVsUpstream = relation(rec.Fork, rec.Upstream)
+
 	return rec
 }
 
@@ -227,6 +263,7 @@ func relation(a, b DecResult) string {
 	case a.PCMSHA256 == b.PCMSHA256:
 		return "same_samples_different_end"
 	}
+
 	return "different"
 }
 
@@ -234,14 +271,19 @@ func relation(a, b DecResult) string {
 // a subprocess, comparing the two PCM streams as they arrive.
 func compareFile(lib libFLAC, path, dec string, limit time.Duration) (DecResult, LibResult) {
 	start := time.Now()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	cmd, wrap := lib.pcmCmd(ctx, path, peekBitsPerSample(path))
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return DecResult{Verdict: "harness_error", Error: err.Error()}, LibResult{Exit: -1, Error: err.Error()}
 	}
+
 	errBuf := &capBuffer{max: 16384}
+
 	cmd.Stderr = errBuf
 	if err := cmd.Start(); err != nil {
 		return DecResult{
@@ -252,12 +294,17 @@ func compareFile(lib libFLAC, path, dec string, limit time.Duration) (DecResult,
 			Error: err.Error(),
 		}
 	}
+
 	libR := bufio.NewReaderSize(wrap(stdout), 1<<20)
 	libHash := sha256.New()
+
 	var libBytes int64
+
 	done := make(chan DecResult, 1)
 	go func() { done <- decodeAgainst(path, dec, libR, libHash, &libBytes) }()
+
 	timer := time.NewTimer(limit)
+
 	var r DecResult
 	select {
 	case r = <-done:
@@ -265,12 +312,15 @@ func compareFile(lib libFLAC, path, dec string, limit time.Duration) (DecResult,
 	case <-timer.C:
 		// The decoder goroutine is abandoned; flac is killed.
 		cancel()
+
 		_ = cmd.Wait()
+
 		return DecResult{
 			Verdict: "timeout", Error: fmt.Sprintf("no result after %s", limit),
 			Seconds: time.Since(start).Seconds(),
 		}, LibResult{Exit: -1, Error: "killed after the decoder's timeout"}
 	}
+
 	extra, _ := io.Copy(libHash, libR)
 	libBytes += extra
 	werr := cmd.Wait()
@@ -280,33 +330,41 @@ func compareFile(lib libFLAC, path, dec string, limit time.Duration) (DecResult,
 	r.LibBeyond = extra
 	r.Seconds = time.Since(start).Seconds()
 	classify(&r, lr)
+
 	return r, lr
 }
 
 func decodeAgainst(path, dec string, lib io.Reader, libHash hash.Hash, libBytes *int64) (r DecResult) {
 	pcmHash := sha256.New()
+
 	defer func() {
 		if p := recover(); p != nil {
 			r.Panic = clip(fmt.Sprint(p), 500)
 			r.Stack = trimStack(debug.Stack())
 		}
+
 		r.PCMSHA256 = hex.EncodeToString(pcmHash.Sum(nil))
 	}()
+
 	f, err := os.Open(path)
 	if err != nil {
 		r.Error = err.Error()
 		return r
 	}
 	defer f.Close()
+
 	d, err := openDecoder(dec, bufio.NewReaderSize(f, 1<<20))
 	if err != nil {
 		r.Error = "open: " + clip(err.Error(), 300)
 		return r
 	}
+
 	info := d.Info()
 	r.info = &info
 	md5h := md5.New()
+
 	var buf []byte
+
 	sink := func(got []byte) {
 		md5h.Write(got)
 		pcmHash.Write(got)
@@ -315,12 +373,15 @@ func decodeAgainst(path, dec string, lib io.Reader, libHash hash.Hash, libBytes 
 		if cap(buf) < len(got) {
 			buf = make([]byte, len(got))
 		}
+
 		want := buf[:len(got)]
 		n, _ := io.ReadFull(lib, want)
 		libHash.Write(want[:n])
 		*libBytes += int64(n)
+
 		return want[:n]
 	})
+
 	if r.Error == "" {
 		switch {
 		case info.MD5 == strings.Repeat("0", 32):
@@ -333,6 +394,7 @@ func decodeAgainst(path, dec string, lib io.Reader, libHash hash.Hash, libBytes 
 	} else {
 		r.MD5Status = "incomplete"
 	}
+
 	return r
 }
 
@@ -343,8 +405,11 @@ func decodeAgainst(path, dec string, lib io.Reader, libHash hash.Hash, libBytes 
 func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte), ref func(got []byte) []byte) {
 	bps := int(info.BitsPerSample)
 	width := sampleWidth(bps)
+
 	var got []byte
+
 	refDone := false
+
 	for r.Frames < maxFrames {
 		fr, err := d.Next()
 		if err != nil {
@@ -352,15 +417,21 @@ func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte),
 				if err != io.EOF {
 					r.EOFNote = clip(err.Error(), 300)
 				}
+
 				return
 			}
+
 			r.Error = clip(err.Error(), 300)
+
 			return
 		}
+
 		if r.Assignments == nil {
 			r.Assignments = map[string]int64{}
 		}
+
 		r.Assignments[fr.Assignment]++
+
 		at := Diff{Frame: r.Frames, FrameNumber: fr.Num, FirstSample: r.SampleFrames}
 		if !frameShapeOK(fr, int(info.NChannels)) {
 			r.BadShape++
@@ -369,6 +440,7 @@ func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte),
 				for c, ch := range fr.Samples {
 					lens[c] = len(ch)
 				}
+
 				d := at
 				d.Kind, d.Note = "shape", fmt.Sprintf(
 					"block size %d, channel lengths %v, STREAMINFO channels %d",
@@ -379,6 +451,7 @@ func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte),
 				r.FirstDiff = &d
 			}
 		}
+
 		for c, ch := range fr.Samples {
 			for i, v := range ch {
 				if !inRange(v, bps) {
@@ -392,20 +465,25 @@ func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte),
 				}
 			}
 		}
+
 		got = pack(got, fr, width)
+
 		r.PCMBytes += int64(len(got))
 		if sink != nil {
 			sink(got)
 		}
+
 		if ref == nil {
 			// Nothing to compare with.
 		} else if refDone {
 			r.BeyondLib += int64(len(got))
 		} else {
 			want := ref(got)
+
 			n := len(want)
 			if !bytes.Equal(got[:n], want) {
 				r.DiffFrames++
+
 				nch := len(fr.Samples)
 				for i := 0; i < fr.BlockSize; i++ {
 					for c := 0; c < nch; c++ {
@@ -413,35 +491,42 @@ func walkFrames(d Decoder, info StreamInfo, r *DecResult, sink func(got []byte),
 						if off+width > n {
 							break
 						}
+
 						if !bytes.Equal(got[off:off+width], want[off:off+width]) {
 							r.DiffSamples++
 							if r.FirstDiff == nil {
 								d := at
 								w := unpack(want[off : off+width])
 								d.Kind, d.Index, d.Channel, d.Want = "sample", i, c, &w
+
 								d.Got = unpack(got[off : off+width])
 								if c < len(fr.Samples) && i < len(fr.Samples[c]) {
 									d.Got = int64(fr.Samples[c][i])
 								}
+
 								r.FirstDiff = &d
 							}
 						}
 					}
 				}
 			}
+
 			if n < len(got) {
 				refDone = true
 				r.BeyondLib += int64(len(got) - n)
 			}
 		}
+
 		r.Frames++
 		r.SampleFrames += int64(fr.BlockSize)
 	}
+
 	r.Error = "harness frame limit reached"
 }
 
 func classify(r *DecResult, lib LibResult) {
 	goOK := r.Error == "" && r.Panic == ""
+
 	lengthDiff := r.LibBeyond > 0 || r.BeyondLib > 0
 	switch {
 	case r.Verdict != "":

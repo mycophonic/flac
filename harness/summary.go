@@ -70,16 +70,21 @@ func readJSONLines[T any](p string) ([]T, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	var out []T
+
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 64<<20)
+
 	for sc.Scan() {
 		var v T
 		if err := json.Unmarshal(sc.Bytes(), &v); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
+
 		out = append(out, v)
 	}
+
 	return out, sc.Err()
 }
 
@@ -89,47 +94,60 @@ func cmdSummarize(args []string) error {
 	label := fl.String("label", "", "a name for the fork commit, printed in the summary")
 	_ = fl.Parse(args)
 	s := Summary{Verdicts: map[string]string{}, Label: *label}
+
 	var v Versions
 	if b, err := os.ReadFile(filepath.Join(*dir, "version.json")); err == nil {
 		_ = json.Unmarshal(b, &v)
 	} else {
 		v = moduleVersions()
 	}
+
 	s.Fork, s.Upstream, s.Go = v.Fork, v.Upstream, v.Go
 	if v.ForkReplace != "" {
 		s.Fork += " => " + v.ForkReplace
 	}
+
 	s.LibFLAC = newLibFLAC().version()
 
 	decode, err := readJSONLines[DecodeRecord](filepath.Join(*dir, "decode.jsonl"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+
 	s.summarizeDecode(decode)
+
 	alloc, err := readJSONLines[AllocRecord](filepath.Join(*dir, "alloc.jsonl"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+
 	s.summarizeAlloc(alloc)
+
 	seek, err := readJSONLines[SeekRecord](filepath.Join(*dir, "seek.jsonl"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+
 	s.summarizeIssues(decode, alloc, seek)
 	s.summarizeSeek(seek)
 	s.summarizeFuzz(filepath.Join(*dir, "fuzz"))
+
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	if err := os.WriteFile(filepath.Join(*dir, "summary.json"), append(b, '\n'), 0o644); err != nil {
 		return err
 	}
+
 	txt := s.text()
 	if err := os.WriteFile(filepath.Join(*dir, "summary.txt"), []byte(txt), 0o644); err != nil {
 		return err
 	}
+
 	fmt.Print(txt)
+
 	return nil
 }
 
@@ -141,6 +159,7 @@ func detail(r DecResult) string {
 		return "panic: " + strings.SplitN(r.Panic, "\n", 2)[0]
 	case r.FirstDiff != nil:
 		d := r.FirstDiff
+
 		s := fmt.Sprintf(
 			"%s at frame %d (frame number %d), sample %d, channel %d: got %d",
 			d.Kind,
@@ -153,22 +172,28 @@ func detail(r DecResult) string {
 		if d.Want != nil {
 			s += fmt.Sprintf(", libFLAC %d", *d.Want)
 		}
+
 		if d.Note != "" {
 			s += " (" + d.Note + ")"
 		}
+
 		if r.DiffSamples > 0 {
 			s += fmt.Sprintf("; %d samples in %d frames differ", r.DiffSamples, r.DiffFrames)
 		}
+
 		return s
 	case r.Error != "":
 		return r.Error
 	}
+
 	return ""
 }
 
 func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 	by := map[string]*CorpusSummary{}
+
 	var order []string
+
 	for _, r := range recs {
 		c, ok := by[r.Corpus]
 		if !ok {
@@ -176,29 +201,36 @@ func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 			by[r.Corpus] = c
 			order = append(order, r.Corpus)
 		}
+
 		c.Files++
 		inc(c.Fork, r.Fork.Verdict)
 		inc(c.Upstream, r.Upstream.Verdict)
 		c.Frames += r.Fork.Frames
+
 		c.SampleFrames += r.Fork.SampleFrames
 		if r.Fork.Verdict != "match" && len(c.NotMatching) < 60 {
 			n := fmt.Sprintf("%s: %s", r.File, r.Fork.Verdict)
 			if d := detail(r.Fork); d != "" {
 				n += ": " + d
 			}
+
 			if !r.LibFLAC.OK {
 				n += " | libFLAC: " + r.LibFLAC.Error
 			}
+
 			c.NotMatching = append(c.NotMatching, n)
 		}
 	}
+
 	for _, name := range order {
 		c := by[name]
 		s.Decode = append(s.Decode, *c)
+
 		s.Verdicts["decode/"+name+"/files"] = fmt.Sprint(c.Files)
 		for k, n := range c.Fork {
 			s.Verdicts["decode/"+name+"/fork/"+k] = fmt.Sprint(n)
 		}
+
 		for k, n := range c.Upstream {
 			s.Verdicts["decode/"+name+"/upstream/"+k] = fmt.Sprint(n)
 		}
@@ -221,14 +253,17 @@ func metadataVerdict(r DecodeRecord) string {
 	if r.LibFLAC.OK {
 		return r.Fork.Verdict
 	}
+
 	newRefuses := r.Fork.Verdict == "both_refuse" || strings.Contains(r.File, "seektable")
 	if newRefuses && r.Fork.ParseError != "" && r.Fork.NewSeekError != "" {
 		return "both_refuse"
 	}
+
 	if r.Fork.Verdict == "panic" || strings.HasPrefix(r.Fork.ParseError, "panic") ||
 		strings.HasPrefix(r.Fork.NewSeekError, "panic") {
 		return "panic"
 	}
+
 	return "missed_error"
 }
 
@@ -237,14 +272,17 @@ func inCorpus(corpus string, names ...string) func(DecodeRecord) bool {
 		if r.Corpus != corpus {
 			return false
 		}
+
 		if len(names) == 0 {
 			return true
 		}
+
 		for _, n := range names {
 			if ok, _ := path.Match(n, r.File); ok {
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -256,6 +294,7 @@ func either(fs ...func(DecodeRecord) bool) func(DecodeRecord) bool {
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -344,11 +383,14 @@ func countsText(m map[string]int) string {
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
+
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%d %s", m[k], k))
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -360,12 +402,15 @@ func (s *Summary) addIssue(is IssueState) {
 func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, seek []SeekRecord) {
 	for _, rule := range decodeRules {
 		var rs []DecodeRecord
+
 		for _, r := range decode {
 			if rule.files(r) {
 				rs = append(rs, r)
 			}
 		}
+
 		is := IssueState{Issue: rule.issue, What: rule.what}
+
 		switch {
 		case len(rs) == 0:
 			is.State, is.Evidence = "not tested", "no reproducer in this run"
@@ -375,11 +420,14 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 				if rule.check != nil {
 					return rule.check(r)
 				}
+
 				return r.Fork.Verdict
 			}
 			m := map[string]int{}
+
 			for _, r := range rs {
 				v := verdict(r)
+
 				m[v]++
 				switch v {
 				case rule.want:
@@ -387,10 +435,12 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 				case rule.broken, "panic", "timeout":
 					broken++
 				}
+
 				if v == "panic" || v == "timeout" {
 					failure = true
 				}
 			}
+
 			switch {
 			case ok == len(rs):
 				is.State = "fixed"
@@ -399,6 +449,7 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 			default:
 				is.State = "changed"
 			}
+
 			is.Evidence = fmt.Sprintf("%d files: %s", len(rs), countsText(m))
 			if is.State != "fixed" {
 				for _, r := range rs {
@@ -409,21 +460,26 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 				}
 			}
 		}
+
 		s.addIssue(is)
 	}
 	// Divergences from libFLAC that open decisions record.
 	for _, rule := range divergenceRules {
 		var rs []DecodeRecord
+
 		for _, r := range decode {
 			if rule.files(r) {
 				rs = append(rs, r)
 			}
 		}
+
 		is := IssueState{Issue: rule.issue, What: rule.what}
+
 		m := map[string]int{}
 		for _, r := range rs {
 			m[r.Fork.Verdict]++
 		}
+
 		switch {
 		case len(rs) == 0:
 			is.State = "not tested"
@@ -434,33 +490,42 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 		default:
 			is.State = "changed"
 		}
+
 		is.Evidence = fmt.Sprintf("%d files: %s", len(rs), countsText(m))
 		s.addIssue(is)
 	}
 	// The cost of metadata strings, whatever their lengths declare.
 	if len(alloc) > 0 {
 		is := IssueState{Issue: "#39", What: "a short metadata string costs about its length, not 4 KiB"}
+
 		var parts []string
+
 		over := 0
+
 		for _, r := range alloc {
 			if r.Decoder != "fork" || r.Issue != "strings" || r.Entry == "meta.Parse" {
 				continue
 			}
+
 			if !r.Bounded {
 				over++
 			}
+
 			parts = append(
 				parts,
 				fmt.Sprintf("%s via %s: %d bytes for %d input bytes", r.Probe, r.Entry, r.AllocBytes, r.InputBytes),
 			)
 		}
+
 		is.State = "fixed"
 		if over > 0 {
 			is.State = "not fixed"
 		}
+
 		if len(parts) == 0 {
 			is.State = "not tested"
 		}
+
 		is.Evidence = strings.Join(parts, "; ")
 		s.addIssue(is)
 	}
@@ -468,33 +533,44 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 	if len(alloc) > 0 {
 		is := IssueState{Issue: "#25", What: "metadata parsers allocate within the block, not the declared lengths"}
 		over, n := 0, 0
-		var worst AllocRecord
-		var first *AllocRecord
+
+		var (
+			worst AllocRecord
+			first *AllocRecord
+		)
+
 		for i, r := range alloc {
 			if r.Decoder != "fork" || r.Issue != "#25" {
 				continue
 			}
+
 			n++
+
 			if !r.Bounded {
 				over++
 			}
+
 			if r.AllocBytes > worst.AllocBytes {
 				worst = r
 			}
+
 			if r.Probe == "vorbis-vendor-8-byte-block" && r.Entry == "meta.Parse" {
 				first = &alloc[i]
 			}
 		}
+
 		is.State = "fixed"
 		if over > 0 {
 			is.State = "not fixed"
 		}
+
 		if first != nil {
 			is.Evidence = fmt.Sprintf(
 				"the 8-byte VORBIS_COMMENT block (vendor length 32 MiB): %d bytes; ",
 				first.AllocBytes,
 			)
 		}
+
 		is.Evidence += fmt.Sprintf("%d of %d fork probes over the bound; the most: %s via %s, %d bytes",
 			over, n, worst.Probe, worst.Entry, worst.AllocBytes)
 		s.addIssue(is)
@@ -507,10 +583,12 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 		}
 		m := map[string]int{}
 		bad := 0
+
 		for _, r := range seek {
 			if r.Decoder != "fork" {
 				continue
 			}
+
 			m[r.Verdict]++
 			switch r.Verdict {
 			case "match", "refused", "libflac_error", "skipped":
@@ -518,10 +596,12 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 				bad++
 			}
 		}
+
 		is.State = "fixed"
 		if bad > 0 {
 			is.State = "not fixed"
 		}
+
 		is.Evidence = "fork seeks: " + countsText(m)
 		s.addIssue(is)
 	}
@@ -531,23 +611,28 @@ func (s *Summary) summarizeSeek(recs []SeekRecord) {
 	if len(recs) == 0 {
 		return
 	}
+
 	s.Seek = map[string]map[string]int{}
 	for _, r := range recs {
 		if s.Seek[r.Decoder] == nil {
 			s.Seek[r.Decoder] = map[string]int{}
 		}
+
 		s.Seek[r.Decoder][r.Verdict]++
 		if r.Decoder == "fork" && r.Verdict != "match" && r.Verdict != "refused" && len(s.SeekNotes) < 40 {
 			n := fmt.Sprintf("%s/%s Seek(%d): %s", r.Corpus, r.File, r.Target, r.Verdict)
 			if r.Error != "" {
 				n += ": " + r.Error
 			}
+
 			if r.Panic != "" {
 				n += ": panic: " + strings.SplitN(r.Panic, "\n", 2)[0]
 			}
+
 			s.SeekNotes = append(s.SeekNotes, n)
 		}
 	}
+
 	for dec, m := range s.Seek {
 		for k, n := range m {
 			s.Verdicts["seek/"+dec+"/"+k] = fmt.Sprint(n)
@@ -564,6 +649,7 @@ func (s *Summary) summarizeAlloc(recs []AllocRecord) {
 		} else if !r.Bounded {
 			v = "over"
 		}
+
 		s.Verdicts["alloc/"+r.Probe+"/"+r.Entry+"/"+r.Decoder] = v
 	}
 }
@@ -573,33 +659,40 @@ var statusLine = regexp.MustCompile(`fuzz: elapsed: (\S+), execs: (\d+) .*new in
 func (s *Summary) summarizeFuzz(dir string) {
 	logs, _ := filepath.Glob(filepath.Join(dir, "Fuzz*.log"))
 	sort.Strings(logs)
+
 	for _, l := range logs {
 		f := FuzzSummary{Target: strings.TrimSuffix(filepath.Base(l), ".log")}
 		b, _ := os.ReadFile(l)
+
 		lines := strings.Split(string(b), "\n")
 		for i, line := range lines {
 			if m := statusLine.FindStringSubmatch(line); m != nil {
 				f.Elapsed, f.Execs, f.Interesting = m[1], m[2], m[3]
 			}
+
 			if strings.HasPrefix(line, "--- FAIL") && !f.Failed {
 				f.Failed = true
 				end := min(len(lines), i+14)
 				f.Failure = strings.TrimSpace(strings.Join(lines[i:end], "\n"))
 			}
 		}
+
 		crashers, _ := filepath.Glob(filepath.Join(dir, "crashers", f.Target, "*"))
 		for _, c := range crashers {
 			f.Crashers = append(f.Crashers, filepath.Base(c))
 		}
+
 		obs, _ := filepath.Glob(filepath.Join(dir, "observations", f.Target, "*.flac"))
 		f.Observations = len(obs)
 		allowed, _ := filepath.Glob(filepath.Join(dir, "allowed", f.Target, "*.flac"))
 		f.Allowed = len(allowed)
 		s.Fuzz = append(s.Fuzz, f)
+
 		failed := "no"
 		if f.Failed {
 			failed = "yes"
 		}
+
 		s.Verdicts["fuzz/"+f.Target+"/failed"] = failed
 	}
 }
@@ -607,38 +700,50 @@ func (s *Summary) summarizeFuzz(dir string) {
 func (s *Summary) text() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "fork      %s", s.Fork)
+
 	if s.Label != "" {
 		fmt.Fprintf(&b, " (%s)", s.Label)
 	}
+
 	fmt.Fprintf(&b, "\nupstream  %s\nlibFLAC   %s\ngo        %s\n\n", s.Upstream, s.LibFLAC, s.Go)
 	fmt.Fprintf(&b, "Decode, each decoder against libFLAC:\n")
+
 	for _, c := range s.Decode {
 		fmt.Fprintf(&b, "  %-12s %4d files  fork: %s\n", c.Corpus, c.Files, countsText(c.Fork))
 		fmt.Fprintf(&b, "  %-12s             upstream: %s\n", "", countsText(c.Upstream))
+
 		for _, n := range c.NotMatching {
 			fmt.Fprintf(&b, "      %s\n", n)
 		}
 	}
+
 	fmt.Fprintf(&b, "\nIssues:\n")
+
 	for _, is := range s.Issues {
 		fmt.Fprintf(&b, "  %-9s %-10s %s\n            %s\n", is.Issue, is.State, is.What, is.Evidence)
 	}
+
 	if s.Seek != nil {
 		fmt.Fprintf(&b, "\nSeek against flac -d --skip/--until:\n")
+
 		for _, dec := range decoderNames {
 			fmt.Fprintf(&b, "  %-9s %s\n", dec, countsText(s.Seek[dec]))
 		}
+
 		for _, n := range s.SeekNotes {
 			fmt.Fprintf(&b, "      %s\n", n)
 		}
 	}
+
 	if len(s.Fuzz) > 0 {
 		fmt.Fprintf(&b, "\nFuzz:\n")
+
 		for _, f := range s.Fuzz {
 			state := "no failure"
 			if f.Failed {
 				state = "FAILED"
 			}
+
 			fmt.Fprintf(
 				&b,
 				"  %-11s %s, %s execs, %s new interesting: %s; %d observations, %d allowed panics\n",
@@ -650,6 +755,7 @@ func (s *Summary) text() string {
 				f.Observations,
 				f.Allowed,
 			)
+
 			if f.Failed {
 				for _, l := range strings.Split(f.Failure, "\n") {
 					fmt.Fprintf(&b, "      %s\n", l)
@@ -657,6 +763,7 @@ func (s *Summary) text() string {
 			}
 		}
 	}
+
 	return b.String()
 }
 
@@ -667,58 +774,76 @@ func cmdCompare(args []string) error {
 		"",
 		"compare only keys with these prefixes, comma separated (default: every key but fuzz/)",
 	)
+
 	_ = fl.Parse(args)
 	if fl.NArg() != 2 {
 		return errors.New("usage: flacharness compare [-only prefixes] a/summary.json b/summary.json")
 	}
+
 	var sa, sb Summary
 	if err := readSummary(fl.Arg(0), &sa); err != nil {
 		return err
 	}
+
 	if err := readSummary(fl.Arg(1), &sb); err != nil {
 		return err
 	}
+
 	prefixes := []string{}
 	if *only != "" {
 		prefixes = strings.Split(*only, ",")
 	}
+
 	want := func(k string) bool {
 		if len(prefixes) == 0 {
 			return !strings.HasPrefix(k, "fuzz/")
 		}
+
 		for _, p := range prefixes {
 			if strings.HasPrefix(k, p) {
 				return true
 			}
 		}
+
 		return false
 	}
+
 	keys := map[string]bool{}
 	for k := range sa.Verdicts {
 		keys[k] = true
 	}
+
 	for k := range sb.Verdicts {
 		keys[k] = true
 	}
+
 	var ks []string
+
 	for k := range keys {
 		if want(k) {
 			ks = append(ks, k)
 		}
 	}
+
 	sort.Strings(ks)
+
 	diff := 0
+
 	for _, k := range ks {
 		x, y := sa.Verdicts[k], sb.Verdicts[k]
 		if x != y {
 			diff++
+
 			fmt.Printf("%s: %q -> %q\n", k, x, y)
 		}
 	}
+
 	fmt.Printf("%d verdicts compared, %d differ\n", len(ks), diff)
+
 	if diff > 0 {
 		os.Exit(1)
 	}
+
 	return nil
 }
 
@@ -727,5 +852,6 @@ func readSummary(p string, s *Summary) error {
 	if err != nil {
 		return err
 	}
+
 	return json.Unmarshal(b, s)
 }
