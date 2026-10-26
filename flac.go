@@ -112,8 +112,11 @@ func New(r io.Reader) (stream *Stream, err error) {
 }
 
 // NewSeek returns a Stream that has seeking enabled. The incoming io.ReadSeeker
-// will not be buffered, which might result in performance issues. Using an
-// in-memory buffer like *bytes.Reader should work well.
+// is read through a 4 KiB buffer that Seek keeps consistent, and a file needs
+// no buffering of its own: the buffer serves the metadata parsers, which read
+// a field at a time (a seek table is one 18-byte read per point; without the
+// buffer each reaches the file), while frame data is read in 4 KiB fills
+// either way. A larger buffer measures the same, sequential and seeking alike.
 func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 	br := bufseekio.NewReadSeeker(rs)
 	stream = &Stream{r: br, seekTableSize: defaultSeekTableSize}
