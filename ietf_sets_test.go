@@ -29,10 +29,11 @@ import (
 var errSetPanic = errors.New("the decoder panicked")
 
 type setOutcome struct {
-	pcm    []byte
-	frames int
-	bps    uint8
-	err    error
+	pcm      []byte
+	frames   int
+	bps      uint8
+	channels int
+	err      error
 }
 
 // decodeWhole decodes the file to its end and interleaves the samples as
@@ -53,6 +54,7 @@ func decodeWhole(path string) (out setOutcome) {
 	defer func() { _ = stream.Close() }()
 
 	out.bps = stream.Info.BitsPerSample
+	out.channels = int(stream.Info.NChannels)
 	bytesPer := int(out.bps) / 8
 
 	for {
@@ -99,6 +101,8 @@ func TestIETFSetsAgainstTheReference(t *testing.T) {
 		t.Skip("no reference flac on the PATH")
 	}
 
+	ffmpegBin := ffmpegOrEmpty()
+
 	root := os.Getenv("FLAC_TEST_FILES")
 	if root == "" {
 		root = filepath.Join("testdata", "flac-test-files")
@@ -106,7 +110,7 @@ func TestIETFSetsAgainstTheReference(t *testing.T) {
 
 	var files []string
 
-	for _, set := range []string{"uncommon", "faulty"} {
+	for _, set := range []string{"subset", "uncommon", "faulty"} {
 		matches, _ := filepath.Glob(filepath.Join(root, set, "*.flac"))
 		files = append(files, matches...)
 	}
@@ -167,6 +171,8 @@ func TestIETFSetsAgainstTheReference(t *testing.T) {
 					at,
 				)
 			}
+
+			holdToFFmpeg(t, ffmpegBin, path, want, int(ours.bps), ours.channels)
 		})
 	}
 }

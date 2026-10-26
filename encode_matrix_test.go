@@ -34,6 +34,15 @@ func (c encodeMatrixCase) name() string {
 func writeMatrixStream(t *testing.T, path string, c encodeMatrixCase) (blocks [][][]int32, frames int) {
 	t.Helper()
 
+	return writeMatrixStreamAtRate(t, path, c, 48000)
+}
+
+// writeMatrixStreamAtRate is writeMatrixStream at a sample rate.
+func writeMatrixStreamAtRate(
+	t *testing.T, path string, c encodeMatrixCase, rate int,
+) (blocks [][][]int32, frames int) {
+	t.Helper()
+
 	file, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +50,7 @@ func writeMatrixStream(t *testing.T, path string, c encodeMatrixCase) (blocks []
 
 	info := &meta.StreamInfo{
 		BlockSizeMin: uint16(c.blockSize), BlockSizeMax: uint16(c.blockSize),
-		SampleRate: 48000, NChannels: uint8(c.channels), BitsPerSample: uint8(c.bps),
+		SampleRate: uint32(rate), NChannels: uint8(c.channels), BitsPerSample: uint8(c.bps),
 	}
 
 	enc, err := flac.NewEncoder(file, info)
@@ -67,7 +76,7 @@ func writeMatrixStream(t *testing.T, path string, c encodeMatrixCase) (blocks []
 
 		f := &frame.Frame{
 			Header: frame.Header{
-				HasFixedBlockSize: true, BlockSize: uint16(k), SampleRate: 48000,
+				HasFixedBlockSize: true, BlockSize: uint16(k), SampleRate: uint32(rate),
 				Channels: c.assignment, BitsPerSample: uint8(c.bps),
 			},
 			Subframes: subframes,
@@ -134,6 +143,8 @@ func TestEncoderMatrixAgainstTheReference(t *testing.T) {
 		t.Skip("no reference flac on the PATH")
 	}
 
+	ffmpegBin := ffmpegOrEmpty()
+
 	var cases []encodeMatrixCase
 
 	for _, n := range []int{1, 15, 17, 4097, 12345} {
@@ -173,6 +184,8 @@ func TestEncoderMatrixAgainstTheReference(t *testing.T) {
 			if !bytes.Equal(got, want) {
 				t.Fatalf("flac -d decodes %d bytes differing from the %d written", len(got), len(want))
 			}
+
+			holdToFFmpeg(t, ffmpegBin, path, want, c.bps, c.channels)
 
 			ours := decodeWhole(path)
 			if ours.err != nil {
@@ -243,6 +256,8 @@ func TestDecoderMatrixAgainstTheReference(t *testing.T) {
 		t.Skip("no reference flac on the PATH")
 	}
 
+	ffmpegBin := ffmpegOrEmpty()
+
 	settings := map[string][]string{
 		"m8":    {"-8", "-m"},
 		"M5":    {"-5", "-M"},
@@ -291,6 +306,8 @@ func TestDecoderMatrixAgainstTheReference(t *testing.T) {
 						len(want),
 					)
 				}
+
+				holdToFFmpeg(t, ffmpegBin, out, want, 32, 2)
 			})
 		}
 	}
