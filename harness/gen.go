@@ -486,6 +486,15 @@ func fixedSub(bps, order int, warmup []int64, residuals int) subframeFn {
 	}
 }
 
+// cleanTwoFrames is the clean stream's two 16-bit stereo constant frames, the
+// second at the rate code given (0b1001 is 44.1 kHz, the first frame's).
+func cleanTwoFrames(rate1 uint64) []byte {
+	f0 := craftFrame([]subframeFn{constantSub(16, 1000), constantSub(16, -1000)}, 16, 16, 0b0001, 0b1001, []byte{0})
+	f1 := craftFrame([]subframeFn{constantSub(16, 2000), constantSub(16, -2000)}, 16, 16, 0b0001, rate1, []byte{1})
+
+	return append(f0, f1...)
+}
+
 // genHostile writes one-defect streams for the decoder's refusals, with
 // valid CRC-8 and CRC-16, each named with its issue, a clean twin, and the
 // three streams of the decisions #20, #21 and #22.
@@ -498,12 +507,7 @@ func genHostile(dir string) (int, error) {
 
 	si := func(bps, n int, md5sum [16]byte) []byte { return streamInfoBody(bps, n, 16, 16, 44100, 2, md5sum) }
 	si16 := si(16, 32, zero)
-	twoFrames := func(rate1 uint64) []byte {
-		f0 := craftFrame([]subframeFn{constantSub(16, 1000), constantSub(16, -1000)}, 16, 16, 0b0001, 0b1001, []byte{0})
-		f1 := craftFrame([]subframeFn{constantSub(16, 2000), constantSub(16, -2000)}, 16, 16, 0b0001, rate1, []byte{1})
-
-		return append(f0, f1...)
-	}
+	twoFrames := cleanTwoFrames
 
 	var wrong [16]byte
 	for i := range wrong {

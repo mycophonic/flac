@@ -132,7 +132,7 @@ if ! skipped gen; then
 	done_step
 fi
 [ -d "$corpus/gen32" ] || die "no corpus in $corpus: run without --skip gen"
-"$bin" version >"$out/version.json"
+"$bin" version -probe "$corpus/bench/bench-16-44100-stereo.flac" >"$out/version.json"
 if [ -z "$label" ] && [ -n "$fork_dir" ]; then
 	label="local checkout at $(git -C "$fork_dir" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 fi
@@ -151,7 +151,7 @@ for d in ${flac_dirs[@]+"${flac_dirs[@]}"}; do
 done
 
 if ! skipped decode; then
-	step "decode: fork, upstream, libFLAC and ffmpeg"
+	step "decode: fork, upstream, libFLAC, ffmpeg and CoreAudio"
 	"$bin" decode -j "$jobs" -out "$out/decode.jsonl" "${corpora[@]}"
 	done_step
 fi

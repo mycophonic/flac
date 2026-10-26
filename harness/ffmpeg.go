@@ -14,7 +14,13 @@ import (
 // ffmpegStderrCap bounds what is kept of ffmpeg's stderr.
 const ffmpegStderrCap = 16384
 
-// Relations of ffmpeg's verdict to libFLAC's.
+// toolAbsent is the version of a tool that is not there.
+const toolAbsent = "absent"
+
+// errorClip bounds an outside implementation's error text kept in a record.
+const errorClip = 200
+
+// Relations of an outside implementation's verdict to libFLAC's.
 const (
 	relAgree          = "agree"
 	relDiffer         = "differ"
@@ -46,7 +52,7 @@ func newFFmpeg() ffmpegTool {
 // version is the first line of ffmpeg -version, "ffmpeg version N ...".
 func (f ffmpegTool) version() string {
 	if !f.present {
-		return "absent"
+		return toolAbsent
 	}
 
 	// #nosec G204 -- the tool named by FFMPEG or found on PATH

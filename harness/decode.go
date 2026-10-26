@@ -52,6 +52,10 @@ type DecodeRecord struct {
 	// libflac_refuses, both_refuse, or no_raw_depth.
 	FFmpeg          *LibResult `json:"ffmpeg,omitempty"`
 	FFmpegVsLibFLAC string     `json:"ffmpeg_vs_libflac,omitempty"`
+	// CoreAudio is the fifth implementation's verdict, absent off macOS or
+	// without cgo; CoreAudioVsLibFLAC relates it as FFmpegVsLibFLAC does.
+	CoreAudio          *LibResult `json:"coreaudio,omitempty"`
+	CoreAudioVsLibFLAC string     `json:"coreaudio_vs_libflac,omitempty"`
 }
 
 // DecResult is one decoder's result on one file.
@@ -174,6 +178,7 @@ func cmdDecode(args []string) error {
 
 	lib := newLibFLAC()
 	ff := newFFmpeg()
+	ca := newCoreAudio(coreAudioProbe(files))
 	results := make([]DecodeRecord, len(files))
 	work := make(chan int)
 
@@ -190,7 +195,7 @@ func cmdDecode(args []string) error {
 			defer wg.Done()
 
 			for i := range work {
-				results[i] = decodeOne(lib, ff, files[i], *timeout)
+				results[i] = decodeOne(lib, ff, ca, files[i], *timeout)
 
 				mu.Lock()
 
@@ -220,7 +225,7 @@ func cmdDecode(args []string) error {
 	return nil
 }
 
-func decodeOne(lib libFLAC, ff ffmpegTool, f inputFile, timeout time.Duration) DecodeRecord {
+func decodeOne(lib libFLAC, ff ffmpegTool, ca coreAudioTool, f inputFile, timeout time.Duration) DecodeRecord {
 	rec := DecodeRecord{Corpus: f.corpus, File: f.rel}
 
 	p := f.path()
@@ -267,6 +272,12 @@ func decodeOne(lib libFLAC, ff ffmpegTool, f inputFile, timeout time.Duration) D
 
 		rec.FFmpeg = &fr
 		rec.FFmpegVsLibFLAC = ffmpegRelation(fr, libs[0])
+	}
+
+	if ca.present {
+		cr := ca.decode(p, peekBitsPerSample(p))
+		rec.CoreAudio = &cr
+		rec.CoreAudioVsLibFLAC = coreAudioRelation(cr, libs[0])
 	}
 
 	return rec

@@ -8,5 +8,7 @@ generated
 
 # Required by limen (book/mandatory-files.md, ".gitignore").
 /.build
+# The harness binary `go build` leaves beside its sources; run.sh builds into .build.
+/harness/harness
 /_scratch
 .claude
