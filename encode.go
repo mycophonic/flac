@@ -1,6 +1,7 @@
 package flac
 
 import (
+	"bytes"
 	"crypto/md5" // #nosec G501 -- FLAC spec mandates MD5 for sample integrity, not used as a security primitive
 	"hash"
 	"io"
@@ -16,6 +17,9 @@ type Encoder struct {
 
 	// Underlying io.Writer or io.WriteCloser to the output stream.
 	w io.Writer
+	// The frame being encoded, header to CRC: written to w whole once every
+	// check has passed, so a refused frame leaves nothing in the stream.
+	frameBuf bytes.Buffer
 	// Minimum and maximum block size (in samples) of frames written by encoder.
 	// The minimum excludes the last block (RFC 9639, section 8.2): a frame's
 	// size joins it once the next frame is written, from lastBlockSize.
