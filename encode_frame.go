@@ -83,14 +83,21 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 		f.Channels = frame.ChannelsLR
 	}
 
-	// Create a new CRC-16 hash writer which adds the data from all write
-	// operations to a running hash.
-	h := crc16.NewIBM()
-	counted := &countingWriter{w: enc.w}
-	hw := io.MultiWriter(h, counted)
-
-	// Encode frame header.
+	// The frame is encoded into a buffer and written whole: a check that
+	// fails in a subframe used to leave the frame header in the stream, and
+	// the stream's statistics counted the refused frame (#50).
 	f.Num = enc.curNum
+
+	enc.frameBuf.Reset()
+
+	if err := enc.encodeFrame(f); err != nil {
+		return err
+	}
+
+	if _, err := enc.w.Write(enc.frameBuf.Bytes()); err != nil {
+		return err
+	}
+
 	if f.HasFixedBlockSize {
 		enc.curNum++
 	} else {
@@ -112,10 +119,31 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	if enc.blockSizeMax == 0 || blockSize > enc.blockSizeMax {
 		enc.blockSizeMax = blockSize
 	}
-	// TODO: track number of bytes written to hw, to update values of
-	// frameSizeMin and frameSizeMax.
+
+	// STREAMINFO's frame sizes are the smallest and largest frame written,
+	// header to CRC.
+	size := uint32(enc.frameBuf.Len()) // #nosec G115 -- a frame is at most a few MB
+	if enc.frameSizeMin == 0 || size < enc.frameSizeMin {
+		enc.frameSizeMin = size
+	}
+
+	if size > enc.frameSizeMax {
+		enc.frameSizeMax = size
+	}
+
 	// Add unencoded audio samples to running MD5 hash.
 	f.Hash(enc.md5sum)
+
+	return nil
+}
+
+// encodeFrame encodes f, header to CRC, into enc.frameBuf, leaving the
+// samples as they were.
+func (enc *Encoder) encodeFrame(f *frame.Frame) error {
+	// Create a new CRC-16 hash writer which adds the data from all write
+	// operations to a running hash.
+	h := crc16.NewIBM()
+	hw := io.MultiWriter(h, &enc.frameBuf)
 
 	if err := enc.encodeFrameHeader(hw, f.Header); err != nil {
 		return err
@@ -170,35 +198,8 @@ func (enc *Encoder) WriteFrame(f *frame.Frame) error {
 	// everything before the crc, back to and including the frame header sync
 	// code.
 	crc := h.Sum16()
-	if err := binary.Write(counted, binary.BigEndian, crc); err != nil {
-		return err
-	}
 
-	// STREAMINFO's frame sizes are the smallest and largest frame written,
-	// header to CRC.
-	size := uint32(counted.n) // #nosec G115 -- a frame is at most a few MB
-	if enc.frameSizeMin == 0 || size < enc.frameSizeMin {
-		enc.frameSizeMin = size
-	}
-
-	if size > enc.frameSizeMax {
-		enc.frameSizeMax = size
-	}
-
-	return nil
-}
-
-// countingWriter counts the bytes written through it.
-type countingWriter struct {
-	w io.Writer
-	n int
-}
-
-func (c *countingWriter) Write(p []byte) (int, error) {
-	n, err := c.w.Write(p)
-	c.n += n
-
-	return n, err
+	return binary.Write(&enc.frameBuf, binary.BigEndian, crc)
 }
 
 // --- [ Frame header ] --------------------------------------------------------
