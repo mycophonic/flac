@@ -109,6 +109,24 @@ func FuzzMetadata(f *testing.F) {
 	f.Add(afterInfo(append([]byte{0x86, 0x60, 0x00, 0x00},
 		be32(be32(be32(be32(be32(be32(be32(be32(nil, 3), 0), 0), 1), 1), 24), 0), 5<<20)...)))
 	f.Add(afterInfo([]byte{0x81, 0xFF, 0xFF, 0xFF})) // padding past the end
+	// Many short strings, every byte present: 2000 three-byte tags in one
+	// block, and 1000 blocks of one tag each (IETF subset/54 is a valid file of
+	// that shape). The cost follows the count of strings, and the bound's
+	// floor would hide 4 KiB per string (#39) behind a declared-length check.
+	f.Add(afterInfo(fuzzBlock(4, shortTags(2000))))
+
+	var blocks []byte
+
+	for i := range 1000 {
+		one := shortTags(1)
+		if i == 999 {
+			blocks = append(blocks, fuzzBlock(4, one)...)
+		} else {
+			blocks = append(blocks, append([]byte{4, 0, 0, byte(len(one))}, one...)...)
+		}
+	}
+
+	f.Add(afterInfo(blocks))
 	f.Add(streamInfoBlock())
 	f.Add([]byte{})
 
