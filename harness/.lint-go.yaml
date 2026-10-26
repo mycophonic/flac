@@ -20,6 +20,14 @@ golangci:
   linters:
     exclusions:
       rules:
+        # go.mod's local replace is the design, not a shortcut: the harness is
+        # a main package nobody imports, and the fork it tests is the checkout
+        # it lives in, which the replace names; the require line is nominal.
+        # A pinned require had Renovate bumping this repository's own digest
+        # after every merge, each bump a merge that opened the next.
+        - path: ^go\.mod$
+          linters:
+            - gomoddirectives
         # ---------------------------------------------------------------------------
         # ONBOARDING BACKLOG. Not a judgment: these are the findings the baseline
         # raised on code that predates the harness's lint lanes, exempted so
