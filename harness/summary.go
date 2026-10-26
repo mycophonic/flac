@@ -23,6 +23,7 @@ type Summary struct {
 	Upstream  string                    `json:"upstream"`
 	Go        string                    `json:"go"`
 	LibFLAC   string                    `json:"libflac"`
+	FFmpeg    string                    `json:"ffmpeg,omitempty"`
 	Decode    []CorpusSummary           `json:"decode"`
 	Issues    []IssueState              `json:"issues"`
 	Alloc     []AllocRecord             `json:"alloc,omitempty"`
@@ -38,6 +39,7 @@ type CorpusSummary struct {
 	Files        int            `json:"files"`
 	Fork         map[string]int `json:"fork"`
 	Upstream     map[string]int `json:"upstream"`
+	FFmpeg       map[string]int `json:"ffmpeg_vs_libflac,omitempty"`
 	Frames       int64          `json:"fork_frames"`
 	SampleFrames int64          `json:"fork_sample_frames"`
 	NotMatching  []string       `json:"fork_not_matching,omitempty"`
@@ -108,6 +110,7 @@ func cmdSummarize(args []string) error {
 	}
 
 	s.LibFLAC = newLibFLAC().version()
+	s.FFmpeg = newFFmpeg().version()
 
 	decode, err := readJSONLines[DecodeRecord](filepath.Join(*dir, "decode.jsonl"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -205,6 +208,15 @@ func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 		c.Files++
 		inc(c.Fork, r.Fork.Verdict)
 		inc(c.Upstream, r.Upstream.Verdict)
+
+		if r.FFmpegVsLibFLAC != "" {
+			if c.FFmpeg == nil {
+				c.FFmpeg = map[string]int{}
+			}
+
+			inc(c.FFmpeg, r.FFmpegVsLibFLAC)
+		}
+
 		c.Frames += r.Fork.Frames
 
 		c.SampleFrames += r.Fork.SampleFrames
@@ -233,6 +245,10 @@ func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 
 		for k, n := range c.Upstream {
 			s.Verdicts["decode/"+name+"/upstream/"+k] = fmt.Sprint(n)
+		}
+
+		for k, n := range c.FFmpeg {
+			s.Verdicts["decode/"+name+"/ffmpeg/"+k] = fmt.Sprint(n)
 		}
 	}
 }
@@ -705,12 +721,23 @@ func (s *Summary) text() string {
 		fmt.Fprintf(&b, " (%s)", s.Label)
 	}
 
-	fmt.Fprintf(&b, "\nupstream  %s\nlibFLAC   %s\ngo        %s\n\n", s.Upstream, s.LibFLAC, s.Go)
+	fmt.Fprintf(
+		&b,
+		"\nupstream  %s\nlibFLAC   %s\nffmpeg    %s\ngo        %s\n\n",
+		s.Upstream,
+		s.LibFLAC,
+		s.FFmpeg,
+		s.Go,
+	)
 	fmt.Fprintf(&b, "Decode, each decoder against libFLAC:\n")
 
 	for _, c := range s.Decode {
 		fmt.Fprintf(&b, "  %-12s %4d files  fork: %s\n", c.Corpus, c.Files, countsText(c.Fork))
 		fmt.Fprintf(&b, "  %-12s             upstream: %s\n", "", countsText(c.Upstream))
+
+		if len(c.FFmpeg) > 0 {
+			fmt.Fprintf(&b, "  %-12s             ffmpeg: %s\n", "", countsText(c.FFmpeg))
+		}
 
 		for _, n := range c.NotMatching {
 			fmt.Fprintf(&b, "      %s\n", n)

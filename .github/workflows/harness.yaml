@@ -53,10 +53,10 @@ jobs:
       # verdicts were made with 1.5.0 (run.sh warns, the summary records the
       # version it ran against). Accepted for a weekly, non-gating run; a
       # 1.5.0 oracle here means a source build through hermetic, later.
-      - name: Install libFLAC's tools
+      - name: Install libFLAC's tools and ffmpeg
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends flac
+          sudo apt-get install -y -q --no-install-recommends flac ffmpeg
           flac --version
 
       - name: Run the harness
