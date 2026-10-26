@@ -28,7 +28,6 @@ type Summary struct {
 	Alloc     []AllocRecord             `json:"alloc,omitempty"`
 	Seek      map[string]map[string]int `json:"seek,omitempty"`
 	SeekNotes []string                  `json:"seek_not_matching,omitempty"`
-	Encode    *EncodeSummary            `json:"encode,omitempty"`
 	Fuzz      []FuzzSummary             `json:"fuzz,omitempty"`
 	Verdicts  map[string]string         `json:"verdicts"`
 }
@@ -50,15 +49,6 @@ type IssueState struct {
 	What     string `json:"what"`
 	State    string `json:"state"` // fixed, not fixed, changed, not tested
 	Evidence string `json:"evidence"`
-}
-
-// EncodeSummary counts the encoder round trip's verdicts and problems.
-type EncodeSummary struct {
-	Encodes  int                       `json:"encodes"`
-	Verdicts map[string]map[string]int `json:"verdicts"` // "<bits>-bit <assignment>" -> verdict -> count
-	Problems map[string]int            `json:"problems"`
-	Written  map[string]map[string]int `json:"written"` // "<bits>-bit <assignment> asked" -> assignment written -> frames
-	Examples []string                  `json:"examples,omitempty"`
 }
 
 // FuzzSummary is one fuzz target's run.
@@ -125,13 +115,8 @@ func cmdSummarize(args []string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	encode, err := readEncode(filepath.Join(*dir, "encode.jsonl"))
-	if err != nil {
-		return err
-	}
-	s.summarizeIssues(decode, alloc, seek, encode)
+	s.summarizeIssues(decode, alloc, seek)
 	s.summarizeSeek(seek)
-	s.summarizeEncode(encode)
 	s.summarizeFuzz(filepath.Join(*dir, "fuzz"))
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -146,41 +131,6 @@ func cmdSummarize(args []string) error {
 	}
 	fmt.Print(txt)
 	return nil
-}
-
-// encodeLine is the part of an encode record the summary reads; it is
-// declared here so a noencoder build can still summarize.
-type encodeLine struct {
-	WAV          string           `json:"wav"`
-	Bits         int              `json:"bits"`
-	Assignment   string           `json:"assignment"`
-	BlockSize    int              `json:"block_size"`
-	Analysis     bool             `json:"analysis"`
-	Verdict      string           `json:"verdict"`
-	Problems     []string         `json:"problems"`
-	LibFLAC      LibResult        `json:"libflac"`
-	LibFLACExact bool             `json:"libflac_exact"`
-	Written      map[string]int64 `json:"written_assignments"`
-	Error        string           `json:"error"`
-	Panic        string           `json:"panic"`
-	StreamInfo   struct {
-		BlockMin     uint16 `json:"block_size_min"`
-		BlockMax     uint16 `json:"block_size_max"`
-		WantBlockMin uint16 `json:"want_block_size_min"`
-		WantBlockMax uint16 `json:"want_block_size_max"`
-		FrameMin     uint32 `json:"frame_size_min"`
-		FrameMax     uint32 `json:"frame_size_max"`
-		MeasFrameMin uint32 `json:"measured_frame_size_min"`
-		MeasFrameMax uint32 `json:"measured_frame_size_max"`
-	} `json:"streaminfo"`
-}
-
-func readEncode(p string) ([]encodeLine, error) {
-	recs, err := readJSONLines[encodeLine](p)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	return recs, err
 }
 
 func inc(m map[string]int, k string) { m[k]++ }
@@ -407,7 +357,7 @@ func (s *Summary) addIssue(is IssueState) {
 	s.Verdicts["issue/"+is.Issue] = is.State
 }
 
-func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, seek []SeekRecord, encode []encodeLine) {
+func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, seek []SeekRecord) {
 	for _, rule := range decodeRules {
 		var rs []DecodeRecord
 		for _, r := range decode {
@@ -575,93 +525,6 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 		is.Evidence = "fork seeks: " + countsText(m)
 		s.addIssue(is)
 	}
-	if len(encode) == 0 {
-		return
-	}
-	// #11: 32-bit decorrelated frames from the encoder.
-	{
-		is := IssueState{
-			Issue: "#11",
-			What:  "the encoder's 32-bit stereo frames asked for with a decorrelated assignment decode to the input",
-		}
-		n, bad := 0, 0
-		var eg string
-		for _, r := range encode {
-			if r.Bits != 32 || r.Assignment == "independent" {
-				continue
-			}
-			n++
-			if !r.LibFLACExact {
-				bad++
-				if eg == "" {
-					eg = fmt.Sprintf("; e.g. %s %s block %d: %s", r.WAV, r.Assignment, r.BlockSize, encodeDetail(r))
-				}
-			}
-		}
-		is.State = "fixed"
-		if bad > 0 {
-			is.State = "not fixed"
-		}
-		if n == 0 {
-			is.State = "not tested"
-		}
-		is.Evidence = fmt.Sprintf("%d of %d encodes not decoded exactly by libFLAC%s", bad, n, eg)
-		s.addIssue(is)
-	}
-	for _, p := range []struct{ issue, what, problem string }{
-		{"#30", "STREAMINFO's minimum block size leaves out the last block", "streaminfo_block_size"},
-		{"#35", "STREAMINFO's frame sizes are measured", "streaminfo_frame_size"},
-		{"#40", "STREAMINFO's block sizes are 16 or more (RFC 9639 section 8.2), so the fork's own decoder opens the stream", "streaminfo_block_size_below_16"},
-	} {
-		is := IssueState{Issue: p.issue, What: p.what}
-		bad := 0
-		var eg string
-		for _, r := range encode {
-			for _, q := range r.Problems {
-				if q == p.problem || p.problem == "streaminfo_frame_size" && strings.HasPrefix(q, p.problem) {
-					bad++
-					if eg == "" {
-						si := r.StreamInfo
-						eg = fmt.Sprintf(
-							"; e.g. %s block %d: %s, block size min/max %d/%d (want %d/%d), frame size min/max %d/%d (measured %d/%d)",
-							r.WAV,
-							r.BlockSize,
-							q,
-							si.BlockMin,
-							si.BlockMax,
-							si.WantBlockMin,
-							si.WantBlockMax,
-							si.FrameMin,
-							si.FrameMax,
-							si.MeasFrameMin,
-							si.MeasFrameMax,
-						)
-					}
-					break
-				}
-			}
-		}
-		is.State = "fixed"
-		if bad > 0 {
-			is.State = "not fixed"
-		}
-		is.Evidence = fmt.Sprintf("%d of %d encodes%s", bad, len(encode), eg)
-		s.addIssue(is)
-	}
-}
-
-func encodeDetail(r encodeLine) string {
-	switch {
-	case r.Panic != "":
-		return "panic: " + strings.SplitN(r.Panic, "\n", 2)[0]
-	case r.Error != "":
-		return r.Error
-	case !r.LibFLAC.OK:
-		return "libFLAC refuses: " + r.LibFLAC.Error
-	case !r.LibFLACExact:
-		return "libFLAC decodes other samples"
-	}
-	return strings.Join(r.Problems, ", ")
 }
 
 func (s *Summary) summarizeSeek(recs []SeekRecord) {
@@ -689,54 +552,6 @@ func (s *Summary) summarizeSeek(recs []SeekRecord) {
 		for k, n := range m {
 			s.Verdicts["seek/"+dec+"/"+k] = fmt.Sprint(n)
 		}
-	}
-}
-
-func (s *Summary) summarizeEncode(recs []encodeLine) {
-	if len(recs) == 0 {
-		return
-	}
-	e := &EncodeSummary{
-		Encodes: len(recs), Verdicts: map[string]map[string]int{}, Problems: map[string]int{},
-		Written: map[string]map[string]int{},
-	}
-	for _, r := range recs {
-		k := fmt.Sprintf("%d-bit %s", r.Bits, r.Assignment)
-		if e.Verdicts[k] == nil {
-			e.Verdicts[k] = map[string]int{}
-		}
-		e.Verdicts[k][r.Verdict]++
-		for _, p := range r.Problems {
-			e.Problems[p]++
-		}
-		if e.Written[k+" asked"] == nil {
-			e.Written[k+" asked"] = map[string]int{}
-		}
-		for a, n := range r.Written {
-			e.Written[k+" asked"][a] += int(n)
-		}
-		if r.Verdict != "ok" && len(e.Examples) < 12 {
-			e.Examples = append(
-				e.Examples,
-				fmt.Sprintf(
-					"%s %s block %d analysis %v: %s",
-					r.WAV,
-					r.Assignment,
-					r.BlockSize,
-					r.Analysis,
-					encodeDetail(r),
-				),
-			)
-		}
-	}
-	s.Encode = e
-	for k, m := range e.Verdicts {
-		for v, n := range m {
-			s.Verdicts["encode/"+k+"/"+v] = fmt.Sprint(n)
-		}
-	}
-	for p, n := range e.Problems {
-		s.Verdicts["encode/problem/"+p] = fmt.Sprint(n)
 	}
 }
 
@@ -815,27 +630,6 @@ func (s *Summary) text() string {
 		}
 		for _, n := range s.SeekNotes {
 			fmt.Fprintf(&b, "      %s\n", n)
-		}
-	}
-	if s.Encode != nil {
-		fmt.Fprintf(&b, "\nEncoder round trip (%d encodes):\n", s.Encode.Encodes)
-		keys := make([]string, 0, len(s.Encode.Verdicts))
-		for k := range s.Encode.Verdicts {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			fmt.Fprintf(
-				&b,
-				"  %-24s %s; written: %s\n",
-				k,
-				countsText(s.Encode.Verdicts[k]),
-				countsText(s.Encode.Written[k+" asked"]),
-			)
-		}
-		fmt.Fprintf(&b, "  problems: %s\n", countsText(s.Encode.Problems))
-		for _, e := range s.Encode.Examples {
-			fmt.Fprintf(&b, "      %s\n", e)
 		}
 	}
 	if len(s.Fuzz) > 0 {

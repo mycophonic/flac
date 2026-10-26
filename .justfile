@@ -24,8 +24,8 @@ test: do::test::go::unit do::test::go::race do::test::go::cover
 [doc('Run the security scans')]
 security: do::security::default
 
-# The differential harness (harness/README.md): decode, seek and encode
-# against libFLAC and upstream mewkiz/flac, each finding mapped to its issue.
+# The differential harness (harness/README.md): decode and seek against
+# libFLAC and upstream mewkiz/flac, each finding mapped to its issue.
 # libFLAC's flac is the oracle, unpinnable like brew (BREW_BIN in
 # .limen/just/main.just) and captured from the ambient PATH the same way
 # (run.sh reads FLAC; override by exporting it).

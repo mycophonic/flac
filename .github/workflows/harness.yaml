@@ -1,5 +1,5 @@
 # The project's own: the differential harness under harness/ (its README),
-# decode, seek and encode held to libFLAC and upstream mewkiz/flac. Not a
+# decode and seek held to libFLAC and upstream mewkiz/flac. Not a
 # gate: its verdicts name the divergences the issues track (#20, #21, #22
 # are under decision), so it runs weekly on main, on demand, and on a change to
 # the harness itself; the summary is the artifact. Same glue as ci: GitHub's

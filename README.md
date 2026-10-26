@@ -115,8 +115,9 @@ run against the reference, each row held to its verdict except the three that
 forbid a panic and record the reference's decision; fuzz targets cover the
 stream and the metadata section under an allocation bound; a race lane runs.
 `harness/` is a differential harness by Arsenie Coseac and the 1-bit bridge
-team that runs decode, seek, encode and fuzz lanes against libFLAC and upstream
-(`just harness`, weekly in CI); it found #39 and #40. Lint, test, security and
+team that runs decode, seek and fuzz lanes against libFLAC and upstream
+(`just harness`, weekly in CI); it found #39 and #40, and its encoder lane is
+the suite's own matrix now. Lint, test, security and
 CI come through [limen](https://github.com/farcloser/limen): `just lint`,
 `just test`.
 
