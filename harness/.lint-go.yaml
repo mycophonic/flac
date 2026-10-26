@@ -1,0 +1,17 @@
+# The harness module's carve-outs from the Go lint baseline
+# (.limen/lint-go.yaml), in .lint-go.yaml's shape: the root module's overlay
+# does not reach a nested module, so this one is the harness's own, rendered
+# on the same baseline by `limen-lint-go -C harness` (the root .justfile's
+# lint-harness).
+
+licenses:
+  # The baseline's list, restated since `allowed` replaces it, plus the
+  # Unlicense: upstream mewkiz/flac and its mewkiz helpers carry it, and so
+  # does this repository's own module, which the harness imports. The
+  # harness exists to compare the two, so neither dependency can go.
+  allowed:
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - MIT
+    - Unlicense
