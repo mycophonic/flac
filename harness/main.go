@@ -3,10 +3,12 @@
 //
 // Subcommands:
 //
+//	gen        the corpora: signals, libFLAC encodings, crafted reproducers
 //	decode     differential decode of FLAC files: fork, upstream and libFLAC
 //	alloc      bytes allocated parsing hostile metadata blocks
 //	seek       Stream.Seek against flac -d --skip/--until
 //	triage     replay fuzz failures and FLAC files against all three decoders
+//	refdecode  an arbitrary-precision decoder from RFC 9639, for triage
 //	summarize  verdicts from an output directory
 //	compare    the verdicts of two summaries
 //	version    the fork and upstream module versions in this binary
@@ -35,6 +37,8 @@ func main() {
 	args := os.Args[2:]
 	var err error
 	switch os.Args[1] {
+	case "gen":
+		err = cmdGen(args)
 	case "decode":
 		err = cmdDecode(args)
 	case "alloc":
@@ -43,6 +47,8 @@ func main() {
 		err = cmdSeek(args)
 	case "triage":
 		err = cmdTriage(args)
+	case "refdecode":
+		err = cmdRefDecode(args)
 	case "summarize":
 		err = cmdSummarize(args)
 	case "compare":
