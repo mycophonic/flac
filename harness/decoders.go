@@ -62,6 +62,7 @@ func assignmentName(v uint8) string {
 	case v == 10:
 		return "mid-side"
 	}
+
 	return fmt.Sprintf("reserved-%d", v)
 }
 
@@ -72,14 +73,17 @@ func openDecoder(name string, r io.Reader) (Decoder, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return &forkDecoder{s: s}, nil
 	case "upstream":
 		s, err := upstream.New(r)
 		if err != nil {
 			return nil, err
 		}
+
 		return &upstreamDecoder{s: s}, nil
 	}
+
 	return nil, fmt.Errorf("unknown decoder %q", name)
 }
 
@@ -90,14 +94,17 @@ func openSeekDecoder(name string, rs io.ReadSeeker) (SeekDecoder, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return &forkDecoder{s: s}, nil
 	case "upstream":
 		s, err := upstream.NewSeek(rs)
 		if err != nil {
 			return nil, err
 		}
+
 		return &upstreamDecoder{s: s}, nil
 	}
+
 	return nil, fmt.Errorf("unknown decoder %q", name)
 }
 
@@ -108,6 +115,7 @@ type forkDecoder struct {
 
 func (d *forkDecoder) Info() StreamInfo {
 	i := d.s.Info
+
 	return StreamInfo{
 		i.BlockSizeMin, i.BlockSizeMax, i.FrameSizeMin, i.FrameSizeMax, i.SampleRate,
 		i.NChannels, i.BitsPerSample, i.NSamples, hex.EncodeToString(i.MD5sum[:]),
@@ -119,15 +127,19 @@ func (d *forkDecoder) Next() (Frame, error) {
 	if err != nil {
 		return Frame{}, err
 	}
+
 	fr := Frame{
 		Num: f.Num, BlockSize: int(f.BlockSize), SampleRate: f.SampleRate, Bits: int(f.BitsPerSample),
 		Assignment: assignmentName(uint8(f.Channels)),
 	}
+
 	d.buf = d.buf[:0]
 	for _, sf := range f.Subframes {
 		d.buf = append(d.buf, sf.Samples)
 	}
+
 	fr.Samples = d.buf
+
 	return fr, nil
 }
 
@@ -140,6 +152,7 @@ type upstreamDecoder struct {
 
 func (d *upstreamDecoder) Info() StreamInfo {
 	i := d.s.Info
+
 	return StreamInfo{
 		i.BlockSizeMin, i.BlockSizeMax, i.FrameSizeMin, i.FrameSizeMax, i.SampleRate,
 		i.NChannels, i.BitsPerSample, i.NSamples, hex.EncodeToString(i.MD5sum[:]),
@@ -151,15 +164,19 @@ func (d *upstreamDecoder) Next() (Frame, error) {
 	if err != nil {
 		return Frame{}, err
 	}
+
 	fr := Frame{
 		Num: f.Num, BlockSize: int(f.BlockSize), SampleRate: f.SampleRate, Bits: int(f.BitsPerSample),
 		Assignment: assignmentName(uint8(f.Channels)),
 	}
+
 	d.buf = d.buf[:0]
 	for _, sf := range f.Subframes {
 		d.buf = append(d.buf, sf.Samples)
 	}
+
 	fr.Samples = d.buf
+
 	return fr, nil
 }
 
@@ -171,9 +188,11 @@ func sampleWidth(bps int) int {
 	if w < 1 {
 		w = 1
 	}
+
 	if w > 4 {
 		w = 4
 	}
+
 	return w
 }
 
@@ -183,11 +202,13 @@ func frameShapeOK(f Frame, channels int) bool {
 	if f.BlockSize < 1 || len(f.Samples) == 0 || (channels > 0 && len(f.Samples) != channels) {
 		return false
 	}
+
 	for _, ch := range f.Samples {
 		if len(ch) != f.BlockSize {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -196,12 +217,14 @@ func frameShapeOK(f Frame, channels int) bool {
 // (frameShapeOK reports it).
 func pack(dst []byte, f Frame, width int) []byte {
 	dst = dst[:0]
+
 	for i := 0; i < f.BlockSize; i++ {
 		for _, ch := range f.Samples {
 			var v int32
 			if i < len(ch) {
 				v = ch[i]
 			}
+
 			u := uint32(v)
 			for k := 0; k < width; k++ {
 				dst = append(dst, byte(u))
@@ -209,6 +232,7 @@ func pack(dst []byte, f Frame, width int) []byte {
 			}
 		}
 	}
+
 	return dst
 }
 
@@ -218,7 +242,9 @@ func unpack(b []byte) int64 {
 	for k := len(b) - 1; k >= 0; k-- {
 		u = u<<8 | uint64(b[k])
 	}
+
 	shift := 64 - 8*uint(len(b))
+
 	return int64(u<<shift) >> shift
 }
 
@@ -227,7 +253,9 @@ func inRange(v int32, bps int) bool {
 	if bps <= 0 || bps >= 32 {
 		return true
 	}
+
 	lim := int32(1) << (bps - 1)
+
 	return v >= -lim && v < lim
 }
 
@@ -239,12 +267,15 @@ func firstPCMDiff(got, want []byte, width, nch int) *Diff {
 		if !bytes.Equal(got[i:i+width], want[i:i+width]) {
 			k := i / width
 			w := unpack(want[i : i+width])
+
 			return &Diff{Kind: "sample", Index: k / nch, Channel: k % nch, Got: unpack(got[i : i+width]), Want: &w}
 		}
 	}
+
 	if len(got) != len(want) {
 		return &Diff{Kind: "length", Note: fmt.Sprintf("%d PCM bytes, want %d", len(got), len(want))}
 	}
+
 	return nil
 }
 
@@ -257,18 +288,22 @@ func metadataErrors(name, path string) (parseErr, newSeekErr string) {
 		return err.Error(), err.Error()
 	}
 	defer f.Close()
+
 	try := func(fn func() error) (s string) {
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
 			return err.Error()
 		}
+
 		defer func() {
 			if p := recover(); p != nil {
 				s = clip(fmt.Sprintf("panic: %v", p), 300)
 			}
 		}()
+
 		if err := fn(); err != nil {
 			return clip(err.Error(), 300)
 		}
+
 		return ""
 	}
 	if name == "fork" {
@@ -278,5 +313,6 @@ func metadataErrors(name, path string) (parseErr, newSeekErr string) {
 		parseErr = try(func() error { _, err := upstream.Parse(bufio.NewReaderSize(f, 64<<10)); return err })
 		newSeekErr = try(func() error { _, err := upstream.NewSeek(f); return err })
 	}
+
 	return parseErr, newSeekErr
 }

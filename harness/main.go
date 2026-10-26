@@ -34,8 +34,11 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
+
 	args := os.Args[2:]
+
 	var err error
+
 	switch os.Args[1] {
 	case "gen":
 		err = cmdGen(args)
@@ -58,6 +61,7 @@ func main() {
 	default:
 		usage()
 	}
+
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "flacharness:", err)
 		os.Exit(1)
@@ -79,10 +83,12 @@ type Versions struct {
 
 func moduleVersions() Versions {
 	var v Versions
+
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return v
 	}
+
 	v.Go = bi.GoVersion
 	for _, d := range bi.Deps {
 		switch d.Path {
@@ -97,12 +103,14 @@ func moduleVersions() Versions {
 				} else {
 					r = "local:" + lastElem(r)
 				}
+
 				v.ForkReplace = r
 			}
 		case upstreamModule:
 			v.Upstream = d.Version
 		}
 	}
+
 	return v
 }
 
@@ -111,6 +119,7 @@ func lastElem(p string) string {
 	if i := strings.LastIndexAny(p, "/\\"); i >= 0 {
 		return p[i+1:]
 	}
+
 	return p
 }
 
@@ -122,6 +131,7 @@ type jsonLines struct {
 func newJSONLines(w io.Writer) *jsonLines {
 	e := json.NewEncoder(w)
 	e.SetEscapeHTML(false)
+
 	return &jsonLines{enc: e}
 }
 
@@ -132,6 +142,7 @@ func createOut(path string) (io.WriteCloser, error) {
 	if path == "" || path == "-" {
 		return nopCloser{os.Stdout}, nil
 	}
+
 	return os.Create(path)
 }
 
@@ -150,8 +161,10 @@ func (c *capBuffer) Write(p []byte) (int, error) {
 		if len(p) < room {
 			room = len(p)
 		}
+
 		c.b = append(c.b, p[:room]...)
 	}
+
 	return len(p), nil
 }
 
@@ -161,24 +174,31 @@ func (c *capBuffer) String() string { return string(c.b) }
 // goroutine header and the frames below the runtime's panic machinery.
 func trimStack(s []byte) string {
 	lines := strings.Split(string(s), "\n")
+
 	var out []string
+
 	skip := true
+
 	for i, l := range lines {
 		if i == 0 {
 			out = append(out, l)
 			continue
 		}
+
 		if skip && strings.HasPrefix(l, "panic(") {
 			skip = false
 			continue
 		}
+
 		if !skip {
 			out = append(out, strings.TrimSpace(l))
 		}
+
 		if len(out) > 40 {
 			break
 		}
 	}
+
 	if skip {
 		// No panic frame found: keep the head of the stack.
 		out = lines
@@ -186,5 +206,6 @@ func trimStack(s []byte) string {
 			out = out[:40]
 		}
 	}
+
 	return strings.Join(out, "\n")
 }

@@ -31,18 +31,22 @@ func readFuzzInput(p string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	const header = "go test fuzz v1\n"
 	if !bytes.HasPrefix(b, []byte(header)) {
 		return b, nil
 	}
+
 	s := strings.TrimSpace(strings.TrimPrefix(string(b), header))
 	if !strings.HasPrefix(s, "[]byte(") || !strings.HasSuffix(s, ")") {
 		return nil, errors.New("not a single []byte corpus entry")
 	}
+
 	v, err := strconv.Unquote(strings.TrimSuffix(strings.TrimPrefix(s, "[]byte("), ")"))
 	if err != nil {
 		return nil, err
 	}
+
 	return []byte(v), nil
 }
 
@@ -57,40 +61,50 @@ func cmdTriage(args []string) error {
 	)
 	maxHex := fl.Int("hex", 4096, "streams up to this many bytes are kept as hex")
 	_ = fl.Parse(args)
+
 	if *dir == "" {
 		return errors.New("triage: -dir is required")
 	}
+
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return err
 	}
+
 	w, err := createOut(*out)
 	if err != nil {
 		return err
 	}
 	defer w.Close()
+
 	jl := newJSONLines(w)
 	lib := newLibFLAC()
+
 	for _, p := range fl.Args() {
 		in, err := readFuzzInput(p)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
+
 		stream := in
 		if *target == "FuzzFrame" && !bytes.HasPrefix(in, []byte("fLaC")) {
 			stream = buildStream(in)
 		}
+
 		name := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p)) + ".flac"
 		if err := os.WriteFile(filepath.Join(*dir, name), stream, 0o644); err != nil {
 			return err
 		}
+
 		rec := TriageRecord{Input: filepath.Base(p), Target: *target, Stream: name, Bytes: len(stream)}
 		if len(stream) <= *maxHex {
 			rec.StreamHex = hex.EncodeToString(stream)
 		}
+
 		rec.Decode = decodeOne(lib, inputFile{corpus: "triage", root: *dir, rel: name}, time.Minute)
 		if err := jl.write(rec); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

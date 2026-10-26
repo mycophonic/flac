@@ -43,20 +43,25 @@ func streamAllocBound(n int) uint64 { return 16<<20 + 64*uint64(n) }
 
 func seedFiles(tb testing.TB) []string {
 	var files []string
+
 	for _, dir := range filepath.SplitList(os.Getenv("FLACHARNESS_SEEDS")) {
 		if dir == "" {
 			continue
 		}
+
 		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err == nil && d.Type().IsRegular() && strings.EqualFold(filepath.Ext(p), ".flac") {
 				files = append(files, p)
 			}
+
 			return nil
 		})
 	}
+
 	if len(files) == 0 {
 		tb.Logf("no seed files: set FLACHARNESS_SEEDS")
 	}
+
 	return files
 }
 
@@ -65,9 +70,11 @@ func readSeed(p string, limit int) []byte {
 	if err != nil {
 		return nil
 	}
+
 	if len(b) > limit {
 		b = b[:limit]
 	}
+
 	return b
 }
 
@@ -77,15 +84,18 @@ func metadataPrefix(b []byte) []byte {
 	if len(b) < 4 || string(b[:4]) != "fLaC" {
 		return nil
 	}
+
 	p := 4
 	for p+4 <= len(b) {
 		last := b[p]&0x80 != 0
 		n := int(b[p+1])<<16 | int(b[p+2])<<8 | int(b[p+3])
 		p = min(len(b), p+4+n)
+
 		if last {
 			break
 		}
 	}
+
 	return b[:p]
 }
 
@@ -95,10 +105,12 @@ func FuzzStream(f *testing.F) {
 			f.Add(b)
 		}
 	}
+
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 1<<20 {
 			t.Skip()
 		}
+
 		checkDecode(t, "FuzzStream", b, b)
 	})
 }
@@ -107,10 +119,12 @@ func FuzzFrame(f *testing.F) {
 	for i := 0; i < 64; i++ {
 		f.Add(seedBytes(i, 64+i*16))
 	}
+
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 64<<10 {
 			t.Skip()
 		}
+
 		checkDecode(t, "FuzzFrame", b, buildStream(b))
 	})
 }
@@ -121,15 +135,19 @@ func FuzzMeta(f *testing.F) {
 			f.Add(m)
 		}
 	}
+
 	for _, p := range allocProbes() {
 		f.Add(p.block)
 		f.Add(cat([]byte("fLaC"), streamInfoBlock(), p.block))
 	}
+
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 1<<20 {
 			t.Skip()
 		}
+
 		bound := metaBound(len(b))
+
 		for _, e := range []struct {
 			name string
 			run  func() error
@@ -139,24 +157,31 @@ func FuzzMeta(f *testing.F) {
 			{"meta.Parse", func() error { _, err := fmeta.Parse(bytes.NewReader(b)); return err }},
 		} {
 			start := time.Now()
+
 			var a, z runtime.MemStats
 			runtime.ReadMemStats(&a)
+
 			var pn string
+
 			func() {
 				defer func() {
 					if p := recover(); p != nil {
 						pn = fmt.Sprintf("%v\n%s", p, trimStack(debug.Stack()))
 					}
 				}()
+
 				_ = e.run()
 			}()
 			runtime.ReadMemStats(&z)
+
 			if pn != "" {
 				t.Fatalf("%s panicked: %s", e.name, pn)
 			}
+
 			if d := time.Since(start); d > slowInput {
 				t.Fatalf("%s took %s", e.name, d)
 			}
+
 			if n := z.TotalAlloc - a.TotalAlloc; n > bound {
 				t.Fatalf("%s allocated %d bytes for a %d-byte input (bound %d)", e.name, n, len(b), bound)
 			}
@@ -173,12 +198,14 @@ func metaBound(n int) uint64 {
 	if v, err := strconv.Atoi(os.Getenv("FLACHARNESS_META_PER_BYTE")); err == nil && v > 0 {
 		per = uint64(v)
 	}
+
 	return 4<<20 + per*uint64(n)
 }
 
 // seedBytes is a deterministic byte string for FuzzFrame's seeds.
 func seedBytes(i, n int) []byte {
 	b := make([]byte, n)
+
 	x := uint32(2166136261) ^ uint32(i)*16777619
 	for k := range b {
 		x ^= x << 13
@@ -186,6 +213,7 @@ func seedBytes(i, n int) []byte {
 		x ^= x << 5
 		b[k] = byte(x)
 	}
+
 	return b
 }
 
@@ -210,31 +238,39 @@ func decodeAll(name string, stream []byte) (r decoded) {
 			r.panic = fmt.Sprintf("%v\n%s", p, trimStack(debug.Stack()))
 		}
 	}()
+
 	d, err := openDecoder(name, bytes.NewReader(stream))
 	if err != nil {
 		r.err = err.Error()
 		return r
 	}
+
 	info := d.Info()
 	r.bps = int(info.BitsPerSample)
 	width := sampleWidth(r.bps)
+
 	var buf []byte
+
 	for len(r.frames) < 1<<16 {
 		fr, err := d.Next()
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				r.err = err.Error()
 			}
+
 			return r
 		}
+
 		if r.badShape == "" && !frameShapeOK(fr, int(info.NChannels)) {
 			lens := make([]int, len(fr.Samples))
 			for c, ch := range fr.Samples {
 				lens[c] = len(ch)
 			}
+
 			r.badShape = fmt.Sprintf("frame %d: block size %d, channel lengths %v, STREAMINFO channels %d",
 				len(r.frames), fr.BlockSize, lens, info.NChannels)
 		}
+
 		for _, ch := range fr.Samples {
 			for _, v := range ch {
 				if !inRange(v, r.bps) {
@@ -242,31 +278,41 @@ func decodeAll(name string, stream []byte) (r decoded) {
 				}
 			}
 		}
+
 		buf = pack(buf, fr, width)
 		r.frames = append(r.frames, frameDigest{fr.BlockSize, len(fr.Samples), sha256.Sum256(buf)})
 	}
+
 	return r
 }
 
 func checkDecode(t *testing.T, target string, input, stream []byte) {
 	start := time.Now()
+
 	var a, z runtime.MemStats
 	runtime.ReadMemStats(&a)
+
 	fr := decodeAll("fork", stream)
+
 	runtime.ReadMemStats(&z)
+
 	if fr.panic != "" {
 		if allowedPanic(fr.panic) {
 			keep("allowed", target, input, stream, fr.panic)
 			return
 		}
+
 		t.Fatalf("fork panicked: %s", fr.panic)
 	}
+
 	if fr.badShape != "" {
 		t.Fatalf("fork yielded a malformed frame: %s", fr.badShape)
 	}
+
 	if d := time.Since(start); d > slowInput {
 		t.Fatalf("fork took %s on a %d-byte stream", d, len(stream))
 	}
+
 	if n := z.TotalAlloc - a.TotalAlloc; n > streamAllocBound(len(stream)) {
 		t.Fatalf("fork allocated %d bytes for a %d-byte stream", n, len(stream))
 	}
@@ -278,10 +324,12 @@ func checkDecode(t *testing.T, target string, input, stream []byte) {
 	if fr.err != "" || fr.outOfRange || fr.bps > 24 {
 		return
 	}
+
 	ur := decodeAll("upstream", stream)
 	if ur.err != "" || ur.panic != "" || len(ur.frames) != len(fr.frames) {
 		return
 	}
+
 	for i := range fr.frames {
 		a, b := fr.frames[i], ur.frames[i]
 		if a.block == b.block && a.channels == b.channels && a.pcm != b.pcm {
@@ -300,6 +348,7 @@ func allowedPanic(p string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -313,8 +362,10 @@ func panicSite(p string) string {
 			strings.HasPrefix(l, "runtime.") || strings.HasPrefix(l, "panic(") || !strings.Contains(l, "(") {
 			continue
 		}
+
 		return l
 	}
+
 	return ""
 }
 
@@ -330,20 +381,26 @@ func keep(kind, target string, input, stream []byte, why string) {
 	if dir == "" {
 		return
 	}
+
 	kept.Lock()
 	defer kept.Unlock()
+
 	if kept.n == nil {
 		kept.n = map[string]int{}
 	}
+
 	if kept.n[kind] >= 200 {
 		return
 	}
+
 	kept.n[kind]++
 	sum := sha256.Sum256(input)
+
 	name := filepath.Join(dir, kind, target, hex.EncodeToString(sum[:8]))
 	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return
 	}
+
 	_ = os.WriteFile(name+".flac", stream, 0o644)
 	meta, _ := json.Marshal(map[string]string{"target": target, "why": why})
 	_ = os.WriteFile(name+".json", meta, 0o644)

@@ -26,10 +26,13 @@ func cmdGen(args []string) error {
 	out := fl.String("out", "", "corpus directory (required)")
 	sha := fl.String("sha", "", "write the sha256 of every file written, one per line")
 	_ = fl.Parse(args)
+
 	if *out == "" {
 		return fmt.Errorf("gen: -out is required")
 	}
+
 	lib := newLibFLAC()
+
 	steps := []struct {
 		name string
 		run  func() (int, error)
@@ -51,33 +54,42 @@ func cmdGen(args []string) error {
 		if err != nil {
 			return fmt.Errorf("gen %s: %w", s.name, err)
 		}
+
 		fmt.Printf("   %-9s %d files\n", s.name, n)
 	}
+
 	if *sha == "" {
 		return nil
 	}
+
 	return writeCorpusSHA(*out, *sha)
 }
 
 func writeCorpusSHA(root, path string) error {
 	var lines []string
+
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
+
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
+
 		rel, _ := filepath.Rel(root, p)
 		sum := sha256.Sum256(b)
 		lines = append(lines, hex.EncodeToString(sum[:])+" "+filepath.ToSlash(rel))
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+
 	sort.Strings(lines)
+
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }
 
@@ -87,19 +99,27 @@ func writeCorpusSHA(root, path string) error {
 func writeWAV(path string, frames [][2]int64, bits, rate int) error {
 	bytesPer := bits / 8
 	pcm := make([]byte, 0, len(frames)*2*bytesPer)
+
 	var b [8]byte
+
 	for _, f := range frames {
 		for _, v := range f {
 			binary.LittleEndian.PutUint64(b[:], uint64(v))
 			pcm = append(pcm, b[:bytesPer]...)
 		}
 	}
+
 	var w []byte
+
 	put32 := func(v uint32) { w = binary.LittleEndian.AppendUint32(w, v) }
 	put16 := func(v uint16) { w = binary.LittleEndian.AppendUint16(w, v) }
+
 	w = append(w, "RIFF"...)
+
 	put32(uint32(36 + len(pcm)))
+
 	w = append(w, "WAVEfmt "...)
+
 	put32(16)
 	put16(1)
 	put16(2)
@@ -107,9 +127,12 @@ func writeWAV(path string, frames [][2]int64, bits, rate int) error {
 	put32(uint32(rate * 2 * bytesPer))
 	put16(uint16(2 * bytesPer))
 	put16(uint16(bits))
+
 	w = append(w, "data"...)
+
 	put32(uint32(len(pcm)))
 	w = append(w, pcm...)
+
 	return os.WriteFile(path, w, 0o644)
 }
 
@@ -121,17 +144,21 @@ func genSignals32(dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	const (
 		maxV = math.MaxInt32
 		minV = math.MinInt32
 		n    = 9000
 	)
+
 	rng := rand.New(rand.NewPCG(20261024, 0))
 	clamp := func(v float64) int64 { return max(minV, min(maxV, int64(v))) }
+
 	sine := make([]float64, n)
 	for i := range sine {
 		sine[i] = math.Sin(2 * math.Pi * 997 * float64(i) / 44100)
 	}
+
 	rangeInt := func(lo, hi int64) int64 { return lo + rng.Int64N(hi-lo+1) }
 	files := map[string]struct {
 		frames [][2]int64
@@ -142,6 +169,7 @@ func genSignals32(dir string) (int, error) {
 		for i := range fr {
 			fr[i] = f(i)
 		}
+
 		files[name] = struct {
 			frames [][2]int64
 			rate   int
@@ -158,10 +186,12 @@ func genSignals32(dir string) (int, error) {
 		return [2]int64{clamp(sine[i] * maxV), clamp(sine[i]*maxV - 3 + float64(rangeInt(-2, 2)))}
 	}, n)
 	add("noise-full", 44100, func(int) [2]int64 { return [2]int64{rangeInt(minV, maxV), rangeInt(minV, maxV)} }, n)
+
 	noise := make([]int64, n)
 	for i := range noise {
 		noise[i] = rangeInt(minV/2, maxV/2)
 	}
+
 	add("noise-corr", 44100, func(i int) [2]int64 {
 		return [2]int64{clamp(float64(2 * noise[i])), clamp(float64(2*noise[i] + rangeInt(-1000, 1000)))}
 	}, n)
@@ -169,6 +199,7 @@ func genSignals32(dir string) (int, error) {
 		if (i/37)%2 == 1 {
 			return [2]int64{maxV, minV}
 		}
+
 		return [2]int64{minV, maxV}
 	}, n)
 	step := float64(int64(1)<<32) / n
@@ -183,6 +214,7 @@ func genSignals32(dir string) (int, error) {
 	add("hires-96k-anti", 96000, func(i int) [2]int64 {
 		return [2]int64{clamp(sine[i] * maxV), clamp(-sine[i] * maxV * 0.999)}
 	}, n)
+
 	for _, k := range []int{1, 2, 3, 4, 5, 15, 16, 17, 33} {
 		add(
 			fmt.Sprintf("short-%d", k),
@@ -191,11 +223,13 @@ func genSignals32(dir string) (int, error) {
 			k,
 		)
 	}
+
 	for name, f := range files {
 		if err := writeWAV(filepath.Join(dir, name+".wav"), f.frames, 32, f.rate); err != nil {
 			return 0, err
 		}
 	}
+
 	return len(files), nil
 }
 
@@ -222,25 +256,32 @@ func encodeCorpus(lib libFLAC, wavDir, dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	wavs, _ := filepath.Glob(filepath.Join(wavDir, "*.wav"))
 	sort.Strings(wavs)
+
 	kept := 0
+
 	for _, w := range wavs {
 		base := strings.TrimSuffix(filepath.Base(w), ".wav")
 		for _, s := range encodeSettings {
 			out := filepath.Join(dir, base+"."+s.tag+".flac")
+
 			args := append(append([]string{"-s", "-f"}, s.args...), "-o", out, w)
 			if err := exec.Command(lib.path, args...).Run(); err != nil {
 				_ = os.Remove(out)
 				continue
 			}
+
 			if err := exec.Command(lib.path, "-s", "-t", out).Run(); err != nil {
 				_ = os.Remove(out)
 				continue
 			}
+
 			kept++
 		}
 	}
+
 	return kept, nil
 }
 
@@ -251,6 +292,7 @@ func genBench(lib libFLAC, dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	type record struct {
 		File      string `json:"file"`
 		Rate      int    `json:"rate"`
@@ -260,13 +302,17 @@ func genBench(lib libFLAC, dir string) (int, error) {
 		PCMBytes  int    `json:"pcm_bytes"`
 		FLACBytes int64  `json:"flac_bytes"`
 	}
+
 	var records []record
+
 	for _, f := range []struct{ rate, bits int }{{44100, 16}, {96000, 24}, {192000, 24}} {
 		rng := rand.New(rand.NewPCG(5388, uint64(f.rate)))
 		full := float64(int64(1)<<(f.bits-1) - 1)
 		bytesPer := f.bits / 8
 		pcm := make([]byte, 0, f.rate*3*2*bytesPer)
+
 		var b [8]byte
+
 		for i := range f.rate * 3 {
 			t := float64(i) / float64(f.rate)
 			for c := range 2 {
@@ -278,10 +324,12 @@ func genBench(lib libFLAC, dir string) (int, error) {
 				pcm = append(pcm, b[:bytesPer]...)
 			}
 		}
+
 		stem := filepath.Join(dir, fmt.Sprintf("bench-%d-%d-stereo", f.bits, f.rate))
 		if err := os.WriteFile(stem+".raw", pcm, 0o644); err != nil {
 			return 0, err
 		}
+
 		args := []string{
 			"--force", "--silent", "-8", "--force-raw-format", "--endian=little", "--sign=signed",
 			"--channels=2", fmt.Sprintf("--bps=%d", f.bits), fmt.Sprintf("--sample-rate=%d", f.rate),
@@ -290,20 +338,24 @@ func genBench(lib libFLAC, dir string) (int, error) {
 		if out, err := exec.Command(lib.path, args...).CombinedOutput(); err != nil {
 			return 0, fmt.Errorf("flac -8 on %s: %w\n%s", stem, err, out)
 		}
+
 		st, err := os.Stat(stem + ".flac")
 		if err != nil {
 			return 0, err
 		}
+
 		sum := md5.Sum(pcm)
 		records = append(records, record{
 			File: filepath.Base(stem) + ".flac", Rate: f.rate, Bits: f.bits, Seconds: 3,
 			PCMMD5: hex.EncodeToString(sum[:]), PCMBytes: len(pcm), FLACBytes: st.Size(),
 		})
 	}
+
 	js, _ := json.MarshalIndent(records, "", "  ")
 	if err := os.WriteFile(filepath.Join(dir, "synthetic.json"), append(js, '\n'), 0o644); err != nil {
 		return 0, err
 	}
+
 	return len(records) * 2, nil
 }
 
@@ -324,6 +376,7 @@ func streamInfoBody(bps, nsamples, minBS, maxBS, rate, channels int, md5sum [16]
 	w.put(binary.BigEndian.Uint64(md5sum[:8]), 64)
 	w.put(binary.BigEndian.Uint64(md5sum[8:]), 64)
 	w.align()
+
 	return w.b
 }
 
@@ -333,6 +386,7 @@ func signature(blocks ...[]byte) []byte {
 	for _, b := range blocks {
 		out = append(out, b...)
 	}
+
 	return out
 }
 
@@ -351,13 +405,18 @@ func frameHeader(bps, blockSize int, chan_, rateCode uint64, number []byte) *bit
 	h.put(chan_, 4)
 	h.put(sampleSizeCodeOf[bps], 3)
 	h.put(0, 1)
+
 	for _, b := range number {
 		h.put(uint64(b), 8)
 	}
+
 	h.put(uint64(blockSize-1), 8)
 	h.align()
+
 	w := &bitWriter{}
+
 	w.b = append(append([]byte{}, h.b...), crc8(h.b))
+
 	return w
 }
 
@@ -365,6 +424,7 @@ func frameHeader(bps, blockSize int, chan_, rateCode uint64, number []byte) *bit
 func seal(w *bitWriter) []byte {
 	w.align()
 	sum := crc16(w.b)
+
 	return append(append([]byte{}, w.b...), byte(sum>>8), byte(sum))
 }
 
@@ -375,6 +435,7 @@ func craftFrame(subframes []subframeFn, bps, blockSize int, chan_, rateCode uint
 	for _, f := range subframes {
 		f(w)
 	}
+
 	return seal(w)
 }
 
@@ -393,10 +454,12 @@ func verbatimWastedSub(bps, wasted, blockSize int) subframeFn {
 		w.put(0b000001, 6)
 		w.put(1, 1)
 		w.unary(uint64(wasted - 1))
+
 		width := 0
 		if wasted < bps {
 			width = bps - wasted
 		}
+
 		for range blockSize {
 			w.put(0, uint(width))
 		}
@@ -408,12 +471,15 @@ func fixedSub(bps, order int, warmup []int64, residuals int) subframeFn {
 		w.put(0, 1)
 		w.put(0b001000|uint64(order), 6)
 		w.put(0, 1)
+
 		for _, v := range warmup {
 			w.putSigned(v, uint(bps))
 		}
+
 		w.put(0, 2)
 		w.put(0, 4)
 		w.put(0, 4)
+
 		for range residuals {
 			w.put(1, 1)
 		}
@@ -427,18 +493,23 @@ func genHostile(dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	var zero [16]byte
+
 	si := func(bps, n int, md5sum [16]byte) []byte { return streamInfoBody(bps, n, 16, 16, 44100, 2, md5sum) }
 	si16 := si(16, 32, zero)
 	twoFrames := func(rate1 uint64) []byte {
 		f0 := craftFrame([]subframeFn{constantSub(16, 1000), constantSub(16, -1000)}, 16, 16, 0b0001, 0b1001, []byte{0})
 		f1 := craftFrame([]subframeFn{constantSub(16, 2000), constantSub(16, -2000)}, 16, 16, 0b0001, rate1, []byte{1})
+
 		return append(f0, f1...)
 	}
+
 	var wrong [16]byte
 	for i := range wrong {
 		wrong[i] = []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF}[i%8]
 	}
+
 	files := map[string][]byte{
 		"clean-16bit-two-frames": append(signature(metaBlock(0, true, 34, si16)), twoFrames(0b1001)...),
 		"int32-wasted16-depth16": append(
@@ -549,6 +620,7 @@ func genHostile(dir string) (int, error) {
 			return 0, err
 		}
 	}
+
 	return len(files), nil
 }
 
@@ -571,25 +643,32 @@ func wideStreamInfo(nsamples int, md5sum [16]byte) []byte {
 // residuals given.
 func wideSide(w *bitWriter, kind string, order, bps int, warm int64, coeffs func(i int) int64, residuals int) {
 	w.put(0, 1)
+
 	if kind == "fixed" {
 		w.put(0b001000|uint64(order), 6)
 	} else {
 		w.put(0b100000|uint64(order-1), 6)
 	}
+
 	w.put(0, 1)
+
 	for range order {
 		w.putSigned(warm, uint(bps))
 	}
+
 	if kind == "lpc" {
 		w.put(14, 4)
 		w.put(0, 5)
+
 		for i := range order {
 			w.putSigned(coeffs(i), 15)
 		}
 	}
+
 	w.put(0, 2)
 	w.put(0, 4)
 	w.put(0, 4)
+
 	for range residuals {
 		w.put(1, 1)
 	}
@@ -602,7 +681,9 @@ func genWide(dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	n := 0
+
 	for _, c := range wideCases {
 		for _, k := range []struct {
 			kind  string
@@ -614,8 +695,10 @@ func genWide(dir string) (int, error) {
 					constantSub(32, math.MaxInt32)(w)
 					continue
 				}
+
 				wideSide(w, k.kind, k.order, 33, 1, func(int) int64 { return 1 }, 0)
 			}
+
 			name := fmt.Sprintf("wide-%s-%s%d-block1.flac", c.name, k.kind, k.order)
 			if err := os.WriteFile(
 				filepath.Join(dir, name),
@@ -624,9 +707,11 @@ func genWide(dir string) (int, error) {
 			); err != nil {
 				return 0, err
 			}
+
 			n++
 		}
 	}
+
 	return n, nil
 }
 
@@ -644,39 +729,50 @@ func genControl(control, boundary string) (int, error) {
 	// L=INT32_MAX and R=INT32_MIN in each assignment: the plain channel's
 	// constant, with the side L-R = 2^32-1.
 	plain := map[uint64]int64{0b1000: math.MaxInt32, 0b1001: math.MinInt32, 0b1010: -1}
+
 	const side = int64(1)<<32 - 1
+
 	n := 0
+
 	for _, c := range wideCases {
 		for _, k := range []struct {
 			kind  string
 			order int
 		}{{"fixed", 4}, {"lpc", 32}} {
 			block := k.order + 1
+
 			var pcm []byte
 			for range block {
 				pcm = binary.LittleEndian.AppendUint32(pcm, uint32(math.MaxInt32))
 				pcm = binary.LittleEndian.AppendUint32(pcm, uint32(1<<31))
 			}
+
 			w := frameHeader(32, block, c.chan_, 0b1001, []byte{0})
 			for ch := range 2 {
 				if ch != c.side {
 					constantSub(32, plain[c.chan_])(w)
 					continue
 				}
+
 				wideSide(w, k.kind, k.order, 33, side, func(i int) int64 {
 					if i == 0 {
 						return 1
 					}
+
 					return 0
 				}, block-k.order)
 			}
+
 			name := fmt.Sprintf("wide-%s-%s%d-block%d.flac", c.name, k.kind, k.order, block)
+
 			data := append(wideStreamInfo(block, md5.Sum(pcm)), seal(w)...)
 			if err := os.WriteFile(filepath.Join(control, name), data, 0o644); err != nil {
 				return 0, err
 			}
+
 			n++
 		}
+
 		for _, kind := range []string{"fixed", "lpc"} {
 			w := frameHeader(32, 1, c.chan_, 0b1001, []byte{0})
 			for ch := range 2 {
@@ -684,8 +780,10 @@ func genControl(control, boundary string) (int, error) {
 					constantSub(32, math.MaxInt32)(w)
 					continue
 				}
+
 				wideSide(w, kind, 1, 33, 1, func(int) int64 { return 1 }, 0)
 			}
+
 			name := fmt.Sprintf("wide-%s-%s1-block1.flac", c.name, kind)
 			if err := os.WriteFile(
 				filepath.Join(boundary, name),
@@ -696,6 +794,7 @@ func genControl(control, boundary string) (int, error) {
 			}
 		}
 	}
+
 	return n, nil
 }
 
@@ -707,11 +806,13 @@ func genTargeted(dir string) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}
+
 	unhex := func(s string) []byte {
 		b, err := hex.DecodeString(s)
 		if err != nil {
 			panic(err)
 		}
+
 		return b
 	}
 	withCRC16 := func(frame []byte) []byte {
@@ -720,6 +821,7 @@ func genTargeted(dir string) (int, error) {
 	}
 	si := streamInfoBody(16, 1, 16, 4096, 44100, 2, [16]byte{})
 	h := unhex("fff869180000")
+
 	h = append(h, crc8(h))
 	for _, t := range []struct {
 		name string
@@ -729,11 +831,13 @@ func genTargeted(dir string) (int, error) {
 		{"lpc-order32-block1", append([]byte{0x7e}, make([]byte, 96)...)},
 	} {
 		frame := withCRC16(append(append([]byte{}, h...), t.sub...))
+
 		data := append(signature(metaBlock(0, true, 34, si)), frame...)
 		if err := os.WriteFile(filepath.Join(dir, t.name+".flac"), data, 0o644); err != nil {
 			return 0, err
 		}
 	}
+
 	if err := os.WriteFile(filepath.Join(dir, "reserved-meta.bin"), unhex("07000000"), 0o644); err != nil {
 		return 0, err
 	}
@@ -744,21 +848,26 @@ func genTargeted(dir string) (int, error) {
 		raw = binary.LittleEndian.AppendUint32(raw, uint32(math.MaxInt32))
 		raw = binary.LittleEndian.AppendUint32(raw, uint32(1<<31))
 	}
+
 	si32 := streamInfoBody(32, 16, 16, 16, 44100, 2, md5.Sum(raw))
 	h32 := unhex("fff869ae000f")
 	h32 = append(h32, crc8(h32))
 	w := &bitWriter{}
+
 	w.b = append([]byte{}, h32...)
 	w.put(0, 8)        // constant subframe, no wasted bits
 	w.put(1<<32-1, 32) // mid: all ones, -1
 	w.put(0, 8)        // constant subframe
 	w.put(1<<32-1, 33) // side: 2^32-1 in 33 bits
+
 	data := append(signature(metaBlock(0, true, 34, si32)), withCRC16(seal(w)[:len(seal(w))-2])...)
 	if err := os.WriteFile(filepath.Join(dir, "valid-32bit-midside.flac"), data, 0o644); err != nil {
 		return 0, err
 	}
+
 	if err := os.WriteFile(filepath.Join(dir, "valid-32bit-midside.expected.raw"), raw, 0o644); err != nil {
 		return 0, err
 	}
+
 	return 5, nil
 }
