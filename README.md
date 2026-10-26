@@ -108,14 +108,17 @@ vendored and trimmed to what the encoder uses, and the `pkg` and `term` modules
 are gone.
 
 **Verification.** The IETF conformance files (`testdata/flac-test-files`, a
-submodule) decode to libFLAC's samples and MD5s; the metadata parser is held to
-`metaflac`, the encoder to `flac -t` and `flac -d`, the bit reader to a plain
-one, the CRCs to long division. Hostile tables of crafted frames and metadata
-run against the reference, each row held to its verdict except the three that
-forbid a panic and record the reference's decision; fuzz targets cover the
-stream and the metadata section under an allocation bound; a race lane runs.
+submodule) decode to libFLAC's samples and MD5s, and to ffmpeg's; the metadata
+parser is held to `metaflac`, the encoder to `flac -t`, `flac -d` and ffmpeg
+over a matrix of lengths, depths, assignments, block sizes and sample rates,
+the bit reader to a plain one, the CRCs to long division. Hostile tables of
+crafted frames and metadata run against the reference, each row held to its
+verdict except the three that forbid a panic and record the reference's
+decision; a random damage sweep holds damaged streams to the reference's
+decision and samples; fuzz targets cover the stream and the metadata section
+under an allocation bound; a race lane runs.
 `harness/` is a differential harness by Arsenie Coseac and the 1-bit bridge
-team that runs decode, seek and fuzz lanes against libFLAC and upstream
+team that runs decode, seek and fuzz lanes against libFLAC, upstream and ffmpeg
 (`just harness`, weekly in CI); it found #39 and #40, and its encoder lane is
 the suite's own matrix now. Lint, test, security and
 CI come through [limen](https://github.com/farcloser/limen): `just lint`,

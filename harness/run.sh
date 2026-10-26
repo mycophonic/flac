@@ -30,7 +30,9 @@
 ##                      bound #33 uses; 1040 looks past a cost of 4 KiB per
 ##                      metadata string)
 ##
-## Environment: FLAC names the flac binary (default: flac on PATH); Go's own
+## Environment: FLAC names the flac binary (default: flac on PATH); FFMPEG
+## names ffmpeg, the fourth implementation the decode lane holds the files to
+## (default: ffmpeg on PATH; absent, the column stays empty); Go's own
 ## variables (GOCACHE, GOMODCACHE, GOFLAGS, GOTOOLCHAIN) apply as usual.
 set -euo pipefail
 
@@ -71,6 +73,7 @@ skipped() { case "$skip" in *",$1,"*) return 0 ;; esac; return 1; }
 
 flac=${FLAC:-flac}
 export FLAC=$flac
+export FFMPEG=${FFMPEG:-ffmpeg}
 command -v go >/dev/null || die "go not found on PATH"
 command -v "$flac" >/dev/null || die "flac not found: install libFLAC's flac tool or set FLAC"
 flac_version=$("$flac" --version 2>&1 | head -1)
@@ -148,7 +151,7 @@ for d in ${flac_dirs[@]+"${flac_dirs[@]}"}; do
 done
 
 if ! skipped decode; then
-	step "decode: fork, upstream and libFLAC"
+	step "decode: fork, upstream, libFLAC and ffmpeg"
 	"$bin" decode -j "$jobs" -out "$out/decode.jsonl" "${corpora[@]}"
 	done_step
 fi

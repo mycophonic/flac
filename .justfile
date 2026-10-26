@@ -34,6 +34,9 @@ security: do::security::default
 # The fuzz targets are left out here (minutes) and run by `just harness-fuzz`,
 # which takes run.sh's options.
 export FLAC := env_var_or_default('FLAC', `command -v flac || true`)
+# ffmpeg likewise: the fourth implementation the decode lane and the
+# reference tests hold the files to; optional, the comparisons skip without it.
+export FFMPEG := env_var_or_default('FFMPEG', `command -v ffmpeg || true`)
 
 [doc('Run the differential harness against this checkout (no fuzz)')]
 harness:

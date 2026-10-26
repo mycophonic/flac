@@ -47,6 +47,11 @@ type DecodeRecord struct {
 	Fork           DecResult   `json:"fork"`
 	Upstream       DecResult   `json:"upstream"`
 	ForkVsUpstream string      `json:"fork_vs_upstream"`
+	// FFmpeg is the fourth implementation's verdict, absent without ffmpeg;
+	// FFmpegVsLibFLAC relates it to libFLAC's: agree, differ, ffmpeg_refuses,
+	// libflac_refuses, both_refuse, or no_raw_depth.
+	FFmpeg          *LibResult `json:"ffmpeg,omitempty"`
+	FFmpegVsLibFLAC string     `json:"ffmpeg_vs_libflac,omitempty"`
 }
 
 // DecResult is one decoder's result on one file.
@@ -168,6 +173,7 @@ func cmdDecode(args []string) error {
 	defer w.Close()
 
 	lib := newLibFLAC()
+	ff := newFFmpeg()
 	results := make([]DecodeRecord, len(files))
 	work := make(chan int)
 
@@ -184,7 +190,7 @@ func cmdDecode(args []string) error {
 			defer wg.Done()
 
 			for i := range work {
-				results[i] = decodeOne(lib, files[i], *timeout)
+				results[i] = decodeOne(lib, ff, files[i], *timeout)
 
 				mu.Lock()
 
@@ -214,7 +220,7 @@ func cmdDecode(args []string) error {
 	return nil
 }
 
-func decodeOne(lib libFLAC, f inputFile, timeout time.Duration) DecodeRecord {
+func decodeOne(lib libFLAC, ff ffmpegTool, f inputFile, timeout time.Duration) DecodeRecord {
 	rec := DecodeRecord{Corpus: f.corpus, File: f.rel}
 
 	p := f.path()
@@ -252,6 +258,16 @@ func decodeOne(lib libFLAC, f inputFile, timeout time.Duration) DecodeRecord {
 	}
 
 	rec.ForkVsUpstream = relation(rec.Fork, rec.Upstream)
+
+	if ff.present {
+		ctx, cancel := context.WithTimeout(context.Background(), limit)
+		fr := ff.decode(ctx, p, peekBitsPerSample(p))
+
+		cancel()
+
+		rec.FFmpeg = &fr
+		rec.FFmpegVsLibFLAC = ffmpegRelation(fr, libs[0])
+	}
 
 	return rec
 }

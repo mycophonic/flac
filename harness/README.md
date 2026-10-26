@@ -3,7 +3,8 @@
 A differential harness for [mycophonic/flac](https://github.com/mycophonic/flac):
 it decodes, seeks and fuzzes the decoder around it, and
 holds every result to libFLAC's `flac` tool and to upstream
-[mewkiz/flac](https://github.com/mewkiz/flac) v1.0.14.
+[mewkiz/flac](https://github.com/mewkiz/flac) v1.0.14, with ffmpeg as a
+fourth implementation on the decode lane.
 
 It was written by Arsenie Coseac and the 1-bit bridge team
 (https://github.com/acoseac) during their evaluation of this library, released
@@ -20,7 +21,7 @@ it, and it belongs in no gate.
 
 | Step | What | Judged by |
 |---|---|---|
-| decode | every `.flac` file, frame by frame and sample by sample | `flac -d` (libFLAC); upstream decodes it too |
+| decode | every `.flac` file, frame by frame and sample by sample | `flac -d` (libFLAC); upstream decodes it too, and ffmpeg's decode is held to libFLAC's at the depths both write raw (agree, differ, or who refuses) |
 | decode | each file's metadata through `Parse` and `NewSeek` as well (`New` skips the bodies it does not need) | the same |
 | alloc | the bytes 19 metadata probes make the parsers allocate, through `meta.Parse`, `flac.Parse` and `flac.NewSeek`, measured as `runtime.MemStats.TotalAlloc`: 17 hostile blocks whose lengths claim more than is there, and 2 of many short strings, every byte present | the bound #33's own fuzz target holds: 4 MiB + 16 × the input |
 | seek | `Stream.Seek` to the first and last frames, frame edges and seeded random samples, on one stream in a shuffled order, then the next 1000 samples; and past the end | `flac -d --skip=N --until=N+1000` |
@@ -56,6 +57,7 @@ do not.
 
 - Go 1.25.8 or newer, the fork's `go` directive. Verified with go1.27.3, darwin/arm64.
 - libFLAC's `flac` tool 1.5.0, on `PATH` or named by `FLAC`. Another version runs, with a warning: the verdicts here were checked against 1.5.0.
+- ffmpeg, on `PATH` or named by `FFMPEG`, for the fourth implementation's column; optional, the column is empty without it.
 - bash 3.2 or newer.
 - Network on the first run, for the Go modules: the fork, mewkiz/flac v1.0.14 and its three dependencies.
 
