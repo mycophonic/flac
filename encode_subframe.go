@@ -107,6 +107,15 @@ var (
 
 var errSampleRange = errors.New("sample beyond the subframe's bit depth")
 
+var (
+	errRiceParam   = errors.New("Rice parameter beyond its field")
+	errEscapedBits = errors.New("escaped partition's bits per sample beyond its 5-bit field")
+)
+
+// maxEscapedBits is the largest residual depth an escaped partition's 5-bit
+// field carries.
+const maxEscapedBits = 31
+
 // checkSampleRange refuses a sample the subframe's depth cannot carry: it
 // was written truncated and hashed as written, a stream the reference
 // accepts whose content is not what the caller passed. The depth is the
@@ -137,6 +146,10 @@ func checkPredictor(subframe *frame.Subframe) error {
 		if subframe.RiceSubframe == nil {
 			return errNoRicePartitions
 		}
+
+		if err := checkRicePartitions(subframe); err != nil {
+			return err
+		}
 	}
 
 	if subframe.Pred != frame.PredFIR {
@@ -149,6 +162,38 @@ func checkPredictor(subframe *frame.Subframe) error {
 
 	if subframe.CoeffShift > maxCoeffShift {
 		return fmt.Errorf("%w: %d", errCoeffShift, subframe.CoeffShift)
+	}
+
+	return nil
+}
+
+// checkRicePartitions refuses a Rice parameter beyond its field, 4 or 5 bits
+// by the residual coding method, and at the escape code that fills the field
+// an escaped depth beyond its 5 bits: the bit writer masks a value to its
+// field, so each was written as 0 and the stream decoded to other residuals
+// (#48). A reserved coding method is left to encodeResiduals.
+func checkRicePartitions(subframe *frame.Subframe) error {
+	var paramSize uint
+
+	switch subframe.ResidualCodingMethod {
+	case frame.ResidualCodingMethodRice1:
+		paramSize = 4
+	case frame.ResidualCodingMethodRice2:
+		paramSize = 5
+	default:
+		return nil
+	}
+
+	escape := uint(1)<<paramSize - 1
+
+	for _, partition := range subframe.RiceSubframe.Partitions {
+		if partition.Param > escape {
+			return fmt.Errorf("%w: %d in %d bits", errRiceParam, partition.Param, paramSize)
+		}
+
+		if partition.Param == escape && partition.EscapedBitsPerSample > maxEscapedBits {
+			return fmt.Errorf("%w: %d", errEscapedBits, partition.EscapedBitsPerSample)
+		}
 	}
 
 	return nil
