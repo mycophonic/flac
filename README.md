@@ -14,6 +14,9 @@ frames and seeking; `flac/frame` the audio frames and their subframes;
 `flac/meta` the metadata blocks (STREAMINFO, VORBIS_COMMENT, PICTURE, SEEKTABLE,
 CUESHEET, APPLICATION, PADDING). The reference is
 [pkg.go.dev/github.com/mycophonic/flac](https://pkg.go.dev/github.com/mycophonic/flac).
+Under `docs/`: [where the decoder's time goes and what was tried](docs/performance.md),
+and the [decoders](docs/decoders.md) and [encoders](docs/encoders.md) in the field,
+the ones this library is held to among them.
 
 ```go
 import "github.com/mycophonic/flac"
