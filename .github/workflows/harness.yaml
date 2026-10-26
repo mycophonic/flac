@@ -1,0 +1,76 @@
+# The project's own: the differential harness under harness/ (its README),
+# decode, seek and encode held to libFLAC and upstream mewkiz/flac. Not a
+# gate: its verdicts name the divergences the issues track (#20, #21, #22
+# are under decision), so it runs weekly on main, on demand, and on a change to
+# the harness itself; the summary is the artifact. Same glue as ci: GitHub's
+# own actions pinned by SHA, hermetic's pins, `just` running the recipe a
+# laptop runs. libFLAC's flac and metaflac come from the runner's apt.
+name: harness
+
+on:
+  schedule:
+    # Weekly, Monday morning: the oracle (libFLAC) and upstream are pinned,
+    # so a verdict moves only with the tree, and main's pushes are gated.
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - harness/**
+      - .github/workflows/harness.yaml
+
+# No default token permissions: the job states what it needs. This workflow
+# only ever reads the repository.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  harness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      - uses: ./.github/actions/cache
+        with:
+          mode: restore
+
+      # The oracle. xiph publishes no Linux binaries, so apt from the pinned
+      # image is the route, and the image pins the version: 1.4.3, where the
+      # verdicts were made with 1.5.0 (run.sh warns, the summary records the
+      # version it ran against). Accepted for a weekly, non-gating run; a
+      # 1.5.0 oracle here means a source build through hermetic, later.
+      - name: Install libFLAC's tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends flac
+          flac --version
+
+      - name: Vet the harness module
+        run: just harness-check
+
+      - name: Run the harness
+        run: just harness
+
+      - name: Keep the summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: harness-summary
+          path: |
+            .build/harness/summary.txt
+            .build/harness/summary.json
+          if-no-files-found: ignore
