@@ -6,7 +6,6 @@
 //	decode     differential decode of FLAC files: fork, upstream and libFLAC
 //	alloc      bytes allocated parsing hostile metadata blocks
 //	seek       Stream.Seek against flac -d --skip/--until
-//	encode     the fork's encoder round trip, judged by libFLAC
 //	triage     replay fuzz failures and FLAC files against all three decoders
 //	summarize  verdicts from an output directory
 //	compare    the verdicts of two summaries
@@ -42,8 +41,6 @@ func main() {
 		err = cmdAlloc(args)
 	case "seek":
 		err = cmdSeek(args)
-	case "encode":
-		err = cmdEncode(args)
 	case "triage":
 		err = cmdTriage(args)
 	case "summarize":
@@ -68,15 +65,14 @@ func usage() {
 
 // Versions names the modules this binary was built against.
 type Versions struct {
-	Fork          string `json:"fork"`
-	ForkReplace   string `json:"fork_replace,omitempty"`
-	Upstream      string `json:"upstream"`
-	Go            string `json:"go"`
-	EncoderTested bool   `json:"encoder_built"`
+	Fork        string `json:"fork"`
+	ForkReplace string `json:"fork_replace,omitempty"`
+	Upstream    string `json:"upstream"`
+	Go          string `json:"go"`
 }
 
 func moduleVersions() Versions {
-	v := Versions{EncoderTested: encoderBuilt}
+	var v Versions
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return v

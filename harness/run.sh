@@ -2,7 +2,7 @@
 ## usage: ./run.sh [options]
 ##
 ## Generates the corpora, builds the harness against one mycophonic/flac
-## commit, then decodes, probes, seeks, encodes, fuzzes and summarizes.
+## commit, then decodes, probes, seeks, fuzzes and summarizes.
 ##
 ##   --fork REV         a commit, branch or version of github.com/mycophonic/flac,
 ##                      fetched as a Go module
@@ -17,16 +17,15 @@
 ##   --fuzz-targets T   the targets, comma separated (default: FuzzStream,FuzzFrame,FuzzMeta)
 ##   --seed-dir DIR     also seed the fuzzers with the .flac files under DIR
 ##                      (repeatable; by default only the generated corpora)
-##   --jobs N           parallel decodes and encodes (default: 2)
+##   --jobs N           parallel decodes (default: 2)
 ##   --fuzz-workers N   fuzz worker processes (default: --jobs)
 ##   --fuzz-minimize D  time Go spends minimizing each new input or failure
 ##                      (default: a twentieth of each target's time, 1s to 10s;
 ##                      Go's own default, 60s, stalls a short run)
-##   --skip STEP        skip gen, decode, alloc, seek, encode or fuzz (repeatable)
+##   --skip STEP        skip gen, decode, alloc, seek or fuzz (repeatable)
 ##   --allow-panic FUNCS  functions (comma separated) whose panics the fuzz run
 ##                      records and goes past: a known panic, such as #34's
 ##                      decodeFixedWide,decodeFIRWide on a commit without its fix
-##   --no-encoder       build without the encoder round trip (-tags noencoder)
 ##   --meta-alloc-per-byte N  FuzzMeta's bound per input byte (default: 16, the
 ##                      bound #33 uses; 1040 looks past a cost of 4 KiB per
 ##                      metadata string)
@@ -37,7 +36,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 launch=$PWD
-fork_rev="" fork_dir="" label="" out="${LIMEN_BUILD:-$here/../.build}/harness" fuzz_time=1500 jobs=2 workers="" skip="," encoder=1 allow="" minimize="" perbyte="" fuzz_targets=FuzzStream,FuzzFrame,FuzzMeta
+fork_rev="" fork_dir="" label="" out="${LIMEN_BUILD:-$here/../.build}/harness" fuzz_time=1500 jobs=2 workers="" skip="," allow="" minimize="" perbyte="" fuzz_targets=FuzzStream,FuzzFrame,FuzzMeta
 flac_dirs=()
 seed_dirs=""
 
@@ -57,7 +56,6 @@ while [ $# -gt 0 ]; do
 	--fuzz-workers) workers=${2:?}; shift 2 ;;
 	--fuzz-minimize) minimize=${2:?}; shift 2 ;;
 	--skip) skip="$skip${2:?},"; shift 2 ;;
-	--no-encoder) encoder=0; shift ;;
 	--allow-panic) allow=${2:?}; shift 2 ;;
 	--meta-alloc-per-byte) perbyte=${2:?}; shift 2 ;;
 	-h | --help) usage ;;
@@ -102,8 +100,6 @@ if ! skipped gen; then
 	rm -rf "$corpus"
 	mkdir -p "$corpus"
 	python3 -I "$here/gen/gen32.py" "$corpus/wav32" >/dev/null
-	python3 -I "$here/gen/gen32.py" --bits 24 "$corpus/wav24" >/dev/null
-	python3 -I "$here/gen/gen32.py" --bits 16 "$corpus/wav16" >/dev/null
 	bash "$here/gen/enc32.sh" "$corpus/wav32" "$corpus/gen32"
 	python3 -I "$here/gen/generate.py" "$corpus/bench"
 	python3 -I "$here/gen/targeted.py" "$corpus/targeted"
@@ -128,7 +124,6 @@ mkdir -p "$build"
 cp "$here/go.mod" "$build/fork.mod"
 cp "$here/go.sum" "$build/fork.sum"
 tags=()
-[ "$encoder" = 1 ] || tags=(-tags=noencoder)
 (
 	cd "$here"
 	if [ -n "$fork_dir" ]; then
@@ -176,11 +171,6 @@ if ! skipped seek; then
 	step "seek against flac -d --skip/--until"
 	"$bin" seek -out "$out/seek.jsonl" -corpus "bench=$corpus/bench" -corpus "gen32=$corpus/gen32" \
 		-match 'bench-*.flac,*.m8.flac,*.b16.flac,*.b192.flac,*.b4608.flac'
-	done_step
-fi
-if [ "$encoder" = 1 ] && ! skipped encode; then
-	step "encoder round trip"
-	"$bin" encode -j "$jobs" -out "$out/encode.jsonl" -wav "$corpus/wav16" -wav "$corpus/wav24" -wav "$corpus/wav32"
 	done_step
 fi
 
@@ -235,4 +225,4 @@ fi
 step "summarize"
 "$bin" summarize -dir "$out" -label "$label"
 echo "   total $(( $(date +%s) - t0 ))s" | tee -a "$out/timing.txt"
-echo "== outputs in $out: summary.txt, summary.json, decode.jsonl, alloc.jsonl, seek.jsonl, encode.jsonl, fuzz/"
+echo "== outputs in $out: summary.txt, summary.json, decode.jsonl, alloc.jsonl, seek.jsonl, fuzz/"

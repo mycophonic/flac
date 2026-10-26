@@ -1,7 +1,7 @@
 # flacharness
 
 A differential harness for [mycophonic/flac](https://github.com/mycophonic/flac):
-it decodes, seeks, encodes and fuzzes the decoder and encoder around it, and
+it decodes, seeks and fuzzes the decoder around it, and
 holds every result to libFLAC's `flac` tool and to upstream
 [mewkiz/flac](https://github.com/mewkiz/flac) v1.0.14.
 
@@ -22,7 +22,6 @@ it, by design); the recipes never run it, and it belongs in no gate.
 | decode | each file's metadata through `Parse` and `NewSeek` as well (`New` skips the bodies it does not need) | the same |
 | alloc | the bytes 19 metadata probes make the parsers allocate, through `meta.Parse`, `flac.Parse` and `flac.NewSeek`, measured as `runtime.MemStats.TotalAlloc`: 17 hostile blocks whose lengths claim more than is there, and 2 of many short strings, every byte present | the bound #33's own fuzz target holds: 4 MiB + 16 × the input |
 | seek | `Stream.Seek` to the first and last frames, frame edges and seeded random samples, on one stream in a shuffled order, then the next 1000 samples; and past the end | `flac -d --skip=N --until=N+1000` |
-| encode | the fork's encoder on 16, 24 and 32-bit stereo, four channel assignments, block sizes 4096, 1152, 192 and 16, prediction analysis on and off | `flac -d` (acceptance, MD5, samples), the fork's own decoder, and the STREAMINFO the stream should carry |
 | fuzz | `FuzzStream`: bytes as a stream. `FuzzFrame`: bytes driving a frame builder that seals each frame with valid CRCs, so mutations reach the subframe decoders. `FuzzMeta`: the metadata parsers, through `flac.Parse`, `flac.NewSeek` and `meta.Parse` | no panic, no input over 5 s, no allocation over the bound; a sample divergence from upstream is kept for triage |
 
 The corpora are generated, not shipped:
@@ -37,8 +36,11 @@ The corpora are generated, not shipped:
 | boundary | 6 | #34 at its edge: order 1 on a one-sample block, which libFLAC refuses (`gen/craft_control.py`) |
 | hostile | 14 | one defect each, for #16, #18, #19, #23, #26, #27 and #34; a clean twin; and the three divergences the open decisions #20, #21 and #22 describe (`gen/craft_hostile.py`) |
 
-`wav16/`, `wav24/` and `wav32/` hold the encoder's input: the gen32 signals at
-each depth (`gen/gen32.py --bits`).
+`wav32/` holds the gen32 signals before libFLAC encodes them. The encoder
+round trip the harness once ran (16, 24 and 32-bit stereo, four channel
+assignments, four block sizes, analysis on and off, every stream held to
+`flac -d`, the fork's own decoder and its STREAMINFO) is the library's own
+test suite now: `TestEncoderMatrixAgainstTheReference` in the checkout.
 
 The generators use fixed seeds and the standard library only. Two runs on one
 machine write byte-identical files; `out/corpus.sha256` lists them. Everything
@@ -92,9 +94,8 @@ input bytes and lets the fuzzer look past it for allocations that follow
 declared lengths.
 
 Other options: `--out DIR`, `--label NAME`, `--skip STEP` (gen, decode, alloc,
-seek, encode, fuzz), `--fuzz-targets LIST`, `--fuzz-workers N`,
-`--fuzz-minimize D`, `--seed-dir DIR` (more fuzz seeds), `--no-encoder` (for a
-commit whose encoder API the harness does not compile against).
+seek, fuzz), `--fuzz-targets LIST`, `--fuzz-workers N`, `--fuzz-minimize D`,
+`--seed-dir DIR` (more fuzz seeds).
 `./run.sh --help` lists them all.
 
 ## Reading the output
@@ -118,10 +119,7 @@ Under "Issues", the summary gives each issue the harness has a reproducer for
 a state: fixed, not fixed, changed (no longer the reported failure, but not
 libFLAC's decision either), or not tested, with the evidence. The open
 decisions #20, #21 and #22 read "diverges" while the fork keeps its choice,
-or "agrees with libFLAC". Two entries have no issue number yet:
-`meta-strings` (a short metadata string costs 4 KiB) and `encoder-min16` (a
-stream shorter than 16 samples gets a STREAMINFO block size below 16, which
-the fork's own decoder refuses).
+or "agrees with libFLAC".
 
 Expected on every commit: upstream refuses 32-bit frames, so its
 `extra_error` on gen32 and control is no finding. libFLAC's raw output takes
@@ -140,8 +138,8 @@ out/build/flacharness compare out-main/summary.json out-pr/summary.json
 It prints every verdict that differs (fuzz results only with `-only fuzz/`),
 and exits 1 if any does.
 
-The other files: `decode.jsonl`, `alloc.jsonl`, `seek.jsonl` and
-`encode.jsonl` hold one record per file, probe, seek or encode.
+The other files: `decode.jsonl`, `alloc.jsonl` and `seek.jsonl` hold one
+record per file, probe or seek.
 `fuzz/<Target>.log` is Go's log, `fuzz/crashers/` the failing inputs (moved
 out of `testdata`), `fuzz/observations/` the divergences and
 `fuzz/allowed/` the allowed panics; `fuzz/triage.jsonl` replays each through
@@ -156,8 +154,7 @@ libFLAC byte for byte on valid files, including 32-bit mid/side LPC.
 ## Runtime
 
 On an Apple M3 Pro, with the modules and the build cached: 4 s to generate
-the corpora and about 15 s more for decode, the probes, seek and the encoder
-round trip; then `--fuzz-time`, 1500 s unless set, split over the targets.
+the corpora and about 10 s more for decode, the probes and seek; then `--fuzz-time`, 1500 s unless set, split over the targets.
 The first run adds the module downloads and a cold build, about a minute.
 Your own folder adds roughly what decoding it takes, twice: 300 MB of FLAC
 took 7 s at `--jobs 2`.
@@ -166,7 +163,7 @@ took 7 s at `--jobs 2`.
 
 ```
 run.sh               the entry point
-*.go                 the Go module: decode, alloc, seek, encode, triage, summarize, compare, and the fuzz targets
+*.go                 the Go module: decode, alloc, seek, triage, summarize, compare, and the fuzz targets
 gen/                 corpus and reproducer generators
 tools/refdecode.py   arbitrary-precision frame decoder for triage
 ```
