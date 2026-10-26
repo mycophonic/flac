@@ -10,9 +10,10 @@ It was written by Arsenie Coseac and the 1-bit bridge team
 into the public domain under the Unlicense (`LICENSE`), and carried here as
 sent, with its paths adjusted to this home and its Go formatted by this
 repository's linters; `just harness` runs it. Its own module keeps upstream
-out of the library's dependency graph. `go test ./...` in this directory is
-red while #39 stands (FuzzMeta's seeds exceed the #33 allocation bound through
-it, by design); the recipes never run it, and it belongs in no gate.
+out of the library's dependency graph. `go test ./...` in this directory
+runs the fuzz targets' seeds against the fork `go.mod` pins, not the
+checkout (`run.sh` builds with a replace directive); the recipes never run
+it, and it belongs in no gate.
 
 ## What it checks
 
@@ -87,11 +88,11 @@ of those functions is then kept under `out/fuzz/allowed/` with its stream,
 and a panic raised anywhere else still fails the target.
 
 `FuzzMeta` holds every parse to #33's bound, 4 MiB + 16 bytes per input byte.
-At `c8830029` a metadata string of up to 4096 bytes costs 4 KiB of heap
-however short it is (see "Issues" below), so an input of many short strings
-fails that bound at once; `--meta-alloc-per-byte 1040` allows 4 KiB per four
-input bytes and lets the fuzzer look past it for allocations that follow
-declared lengths.
+Before #39 a metadata string of up to 4096 bytes cost 4 KiB of heap however
+short it was (see "Issues" below), so an input of many short strings failed
+that bound at once; on such a commit `--meta-alloc-per-byte 1040` allows 4
+KiB per four input bytes and lets the fuzzer look past it for allocations
+that follow declared lengths.
 
 Other options: `--out DIR`, `--label NAME`, `--skip STEP` (gen, decode, alloc,
 seek, fuzz), `--fuzz-targets LIST`, `--fuzz-workers N`, `--fuzz-minimize D`,
