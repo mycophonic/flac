@@ -4,7 +4,7 @@ go 1.25.8
 
 require (
 	github.com/mewkiz/flac v1.0.14
-	github.com/mycophonic/flac v1.0.0-rc2.0.20261026060044-b38c933d73df
+	github.com/mycophonic/flac v1.0.0-rc2.0.20261026082650-a874ba5247fb
 )
 
 require (
