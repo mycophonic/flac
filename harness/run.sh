@@ -72,7 +72,6 @@ skipped() { case "$skip" in *",$1,"*) return 0 ;; esac; return 1; }
 flac=${FLAC:-flac}
 export FLAC=$flac
 command -v go >/dev/null || die "go not found on PATH"
-command -v python3 >/dev/null || die "python3 not found on PATH"
 command -v "$flac" >/dev/null || die "flac not found: install libFLAC's flac tool or set FLAC"
 flac_version=$("$flac" --version 2>&1 | head -1)
 case "$flac_version" in
@@ -95,29 +94,6 @@ done_step() { echo "   $(( $(date +%s) - step_start ))s" | tee -a "$out/timing.t
 : > "$out/timing.txt"
 t0=$(date +%s)
 
-if ! skipped gen; then
-	step "generate the corpora"
-	rm -rf "$corpus"
-	mkdir -p "$corpus"
-	python3 -I "$here/gen/gen32.py" "$corpus/wav32" >/dev/null
-	bash "$here/gen/enc32.sh" "$corpus/wav32" "$corpus/gen32"
-	python3 -I "$here/gen/generate.py" "$corpus/bench"
-	python3 -I "$here/gen/targeted.py" "$corpus/targeted"
-	python3 -I "$here/gen/craft_wide.py" "$corpus/crafted" >/dev/null
-	python3 -I "$here/gen/craft_control.py" "$corpus/control" "$corpus/boundary" >/dev/null
-	python3 -I "$here/gen/craft_hostile.py" "$corpus/hostile" >/dev/null
-	python3 -I - "$corpus" >"$out/corpus.sha256" <<-'PY'
-		import hashlib, os, sys
-		root = sys.argv[1]
-		for d, _, fs in sorted(os.walk(root)):
-		    for f in sorted(fs):
-		        p = os.path.join(d, f)
-		        print(hashlib.sha256(open(p, "rb").read()).hexdigest(), os.path.relpath(p, root))
-	PY
-	echo "   $(wc -l <"$out/corpus.sha256" | tr -d ' ') files; sha256 in corpus.sha256"
-	done_step
-fi
-[ -d "$corpus/gen32" ] || die "no corpus in $corpus: run without --skip gen"
 
 step "build the harness"
 mkdir -p "$build"
@@ -138,7 +114,18 @@ tags=()
 	fi
 	go build -modfile="$build/fork.mod" -trimpath ${tags[@]+"${tags[@]}"} -o "$build/flacharness" .
 )
+
 bin=$build/flacharness
+
+if ! skipped gen; then
+	step "generate the corpora"
+	rm -rf "$corpus"
+	mkdir -p "$corpus"
+	"$bin" gen -out "$corpus" -sha "$out/corpus.sha256"
+	echo "   $(wc -l <"$out/corpus.sha256" | tr -d ' ') files; sha256 in corpus.sha256"
+	done_step
+fi
+[ -d "$corpus/gen32" ] || die "no corpus in $corpus: run without --skip gen"
 "$bin" version >"$out/version.json"
 if [ -z "$label" ] && [ -n "$fork_dir" ]; then
 	label="local checkout at $(git -C "$fork_dir" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"

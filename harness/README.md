@@ -10,9 +10,10 @@ It was written by Arsenie Coseac and the 1-bit bridge team
 into the public domain under the Unlicense (`LICENSE`), and carried here as
 sent, with its paths adjusted to this home and its Go formatted by this
 repository's linters; `just harness` runs it. Its own module keeps upstream
-out of the library's dependency graph. `go test ./...` in this directory is
-red while #39 stands (FuzzMeta's seeds exceed the #33 allocation bound through
-it, by design); the recipes never run it, and it belongs in no gate.
+out of the library's dependency graph. `go test ./...` in this directory
+runs the fuzz targets' seeds against the fork `go.mod` pins, not the
+checkout (`run.sh` builds with a replace directive); the recipes never run
+it, and it belongs in no gate.
 
 ## What it checks
 
@@ -28,13 +29,13 @@ The corpora are generated, not shipped:
 
 | Corpus | Files | What |
 |---|---|---|
-| gen32 | 209 | 32-bit stereo signals (`gen/gen32.py`) encoded 11 ways by libFLAC and kept when `flac -t` accepts them (`gen/enc32.sh`): mid/side, left/side, side/right and independent, block sizes 16 to 4608, fixed and LPC predictors up to order 32, exhaustive search |
-| bench | 3 | 16/44.1, 24/96 and 24/192 stereo, three seconds of tones and noise (`gen/generate.py`) |
-| targeted | 3 | #10's constant 32-bit mid/side frame; #18's warm-up frames on the int32 path (`gen/targeted.py`) |
-| crafted | 6 | #34: the side channel of a 32-bit frame declares fixed order 4 or LPC order 32 on a one-sample block (`gen/craft_wide.py`) |
-| control | 6 | the crafted frames at the smallest legal block, order + 1, with a side value only the 33-bit path holds; libFLAC decodes each to L = INT32_MAX, R = INT32_MIN (`gen/craft_control.py`) |
-| boundary | 6 | #34 at its edge: order 1 on a one-sample block, which libFLAC refuses (`gen/craft_control.py`) |
-| hostile | 14 | one defect each, for #16, #18, #19, #23, #26, #27 and #34; a clean twin; and the three divergences the open decisions #20, #21 and #22 describe (`gen/craft_hostile.py`) |
+| gen32 | 209 | 32-bit stereo signals (`wav32/`) encoded 11 ways by libFLAC and kept when `flac -t` accepts them: mid/side, left/side, side/right and independent, block sizes 16 to 4608, fixed and LPC predictors up to order 32, exhaustive search |
+| bench | 3 | 16/44.1, 24/96 and 24/192 stereo, three seconds of tones and noise |
+| targeted | 3 | #10's constant 32-bit mid/side frame; #18's warm-up frames on the int32 path |
+| crafted | 6 | #34: the side channel of a 32-bit frame declares fixed order 4 or LPC order 32 on a one-sample block |
+| control | 6 | the crafted frames at the smallest legal block, order + 1, with a side value only the 33-bit path holds; libFLAC decodes each to L = INT32_MAX, R = INT32_MIN |
+| boundary | 6 | #34 at its edge: order 1 on a one-sample block, which libFLAC refuses |
+| hostile | 14 | one defect each, for #16, #18, #19, #23, #26, #27 and #34; a clean twin; and the three divergences the open decisions #20, #21 and #22 describe |
 
 `wav32/` holds the gen32 signals before libFLAC encodes them. The encoder
 round trip the harness once ran (16, 24 and 32-bit stereo, four channel
@@ -42,8 +43,9 @@ assignments, four block sizes, analysis on and off, every stream held to
 `flac -d`, the fork's own decoder and its STREAMINFO) is the library's own
 test suite now: `TestEncoderMatrixAgainstTheReference` in the checkout.
 
-The generators use fixed seeds and the standard library only. Two runs on one
-machine write byte-identical files; `out/corpus.sha256` lists them. Everything
+The generators are the `gen` subcommand of the harness binary, Go with fixed
+seeds and the standard library only. Two runs on one machine write
+byte-identical files; `out/corpus.sha256` lists them. Everything
 `run.sh` writes goes under the checkout's `.build/harness` (limen's build
 directory, `--out` picks another); `out/` names it below. The
 encoded corpora depend on the libFLAC version that writes them; the signals
@@ -53,7 +55,6 @@ do not.
 
 - Go 1.25.8 or newer, the fork's `go` directive. Verified with go1.27.3, darwin/arm64.
 - libFLAC's `flac` tool 1.5.0, on `PATH` or named by `FLAC`. Another version runs, with a warning: the verdicts here were checked against 1.5.0.
-- Python 3, standard library only; numpy is not used, neither required nor optional. Verified with Python 3.14.7.
 - bash 3.2 or newer.
 - Network on the first run, for the Go modules: the fork, mewkiz/flac v1.0.14 and its three dependencies.
 
@@ -87,11 +88,11 @@ of those functions is then kept under `out/fuzz/allowed/` with its stream,
 and a panic raised anywhere else still fails the target.
 
 `FuzzMeta` holds every parse to #33's bound, 4 MiB + 16 bytes per input byte.
-At `c8830029` a metadata string of up to 4096 bytes costs 4 KiB of heap
-however short it is (see "Issues" below), so an input of many short strings
-fails that bound at once; `--meta-alloc-per-byte 1040` allows 4 KiB per four
-input bytes and lets the fuzzer look past it for allocations that follow
-declared lengths.
+Before #39 a metadata string of up to 4096 bytes cost 4 KiB of heap however
+short it was (see "Issues" below), so an input of many short strings failed
+that bound at once; on such a commit `--meta-alloc-per-byte 1040` allows 4
+KiB per four input bytes and lets the fuzzer look past it for allocations
+that follow declared lengths.
 
 Other options: `--out DIR`, `--label NAME`, `--skip STEP` (gen, decode, alloc,
 seek, fuzz), `--fuzz-targets LIST`, `--fuzz-workers N`, `--fuzz-minimize D`,
@@ -146,10 +147,12 @@ out of `testdata`), `fuzz/observations/` the divergences and
 all three decoders, with the stream as hex. `out/build/flacharness triage
 -dir DIR FILE...` replays any file.
 
-`tools/refdecode.py` decodes a small stream at arbitrary precision, from
-RFC 9639, and reports every sample outside the depth: a quick way to tell an
-invalid stream from a decoder bug when libFLAC accepts both. It matches
-libFLAC byte for byte on valid files, including 32-bit mid/side LPC.
+`out/build/flacharness refdecode FILE` decodes a small stream at arbitrary
+precision (big integers, from RFC 9639) and reports every sample outside the
+depth: a quick way to tell an invalid stream from a decoder bug when libFLAC
+accepts both. `-raw OUT` writes the samples as `flac -d --force-raw-format`
+does; it matches libFLAC byte for byte on valid files, including 32-bit
+mid/side LPC.
 
 ## Runtime
 
@@ -163,9 +166,7 @@ took 7 s at `--jobs 2`.
 
 ```
 run.sh               the entry point
-*.go                 the Go module: decode, alloc, seek, triage, summarize, compare, and the fuzz targets
-gen/                 corpus and reproducer generators
-tools/refdecode.py   arbitrary-precision frame decoder for triage
+*.go                 the Go module: gen, decode, alloc, seek, triage, refdecode, summarize, compare, and the fuzz targets
 ```
 
 Released into the public domain under the Unlicense by its authors, as mycophonic/flac is; see `LICENSE`.
