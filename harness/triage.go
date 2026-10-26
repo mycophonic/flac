@@ -100,7 +100,9 @@ func cmdTriage(args []string) error {
 			rec.StreamHex = hex.EncodeToString(stream)
 		}
 
-		rec.Decode = decodeOne(lib, newFFmpeg(), inputFile{corpus: "triage", root: *dir, rel: name}, time.Minute)
+		rec.Decode = decodeOne(
+			lib, newFFmpeg(), newCoreAudio(nil), inputFile{corpus: "triage", root: *dir, rel: name}, time.Minute,
+		)
 		if err := jl.write(rec); err != nil {
 			return err
 		}

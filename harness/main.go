@@ -18,6 +18,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -57,7 +58,7 @@ func main() {
 	case "compare":
 		err = cmdCompare(args)
 	case "version":
-		err = json.NewEncoder(os.Stdout).Encode(moduleVersions())
+		err = cmdVersion(args)
 	default:
 		usage()
 	}
@@ -73,12 +74,38 @@ func usage() {
 	os.Exit(2)
 }
 
-// Versions names the modules this binary was built against.
+// Versions names the modules this binary was built against, and the outside
+// implementations it reached: the summary's head reads them from here, so a
+// probe made once (CoreAudio's, on a file the lane names) is what it prints.
 type Versions struct {
 	Fork        string `json:"fork"`
 	ForkReplace string `json:"fork_replace,omitempty"`
 	Upstream    string `json:"upstream"`
 	Go          string `json:"go"`
+	LibFLAC     string `json:"libflac,omitempty"`
+	FFmpeg      string `json:"ffmpeg,omitempty"`
+	CoreAudio   string `json:"coreaudio,omitempty"`
+}
+
+// cmdVersion prints Versions; -probe names a libFLAC-written 16-bit file
+// CoreAudio is tried on first, as the decode lane tries it.
+func cmdVersion(args []string) error {
+	fl := flag.NewFlagSet("version", flag.ExitOnError)
+	probe := fl.String("probe", "", "a FLAC file to probe CoreAudio with before naming it")
+	_ = fl.Parse(args)
+
+	v := moduleVersions()
+	v.LibFLAC = newLibFLAC().version()
+	v.FFmpeg = newFFmpeg().version()
+
+	var probeData []byte
+	if *probe != "" {
+		probeData, _ = os.ReadFile(*probe) // #nosec G304 -- the file run.sh names
+	}
+
+	v.CoreAudio = newCoreAudio(probeData).version()
+
+	return json.NewEncoder(os.Stdout).Encode(v)
 }
 
 func moduleVersions() Versions {

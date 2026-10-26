@@ -32,7 +32,13 @@ defaults:
 
 jobs:
   harness:
-    runs-on: ubuntu-24.04
+    # Two legs: linux for the lanes, macOS for CoreAudio's column, which the
+    # decode lane fills through AudioToolbox and cgo on macOS alone.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -49,14 +55,19 @@ jobs:
           mode: restore
 
       # The oracle. xiph publishes no Linux binaries, so apt from the pinned
-      # image is the route, and the image pins the version: 1.4.3, where the
+      # image is the route on linux (brew's on macOS), and the image pins the
+      # version: 1.4.3, where the
       # verdicts were made with 1.5.0 (run.sh warns, the summary records the
       # version it ran against). Accepted for a weekly, non-gating run; a
       # 1.5.0 oracle here means a source build through hermetic, later.
       - name: Install libFLAC's tools and ffmpeg
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends flac ffmpeg
+          if [ "$RUNNER_OS" = macOS ]; then
+            brew install flac ffmpeg
+          else
+            sudo apt-get update -q
+            sudo apt-get install -y -q --no-install-recommends flac ffmpeg
+          fi
           flac --version
 
       - name: Run the harness
@@ -66,7 +77,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: harness-summary
+          name: harness-summary-${{ matrix.os }}
           path: |
             .build/harness/summary.txt
             .build/harness/summary.json

@@ -24,6 +24,7 @@ type Summary struct {
 	Go        string                    `json:"go"`
 	LibFLAC   string                    `json:"libflac"`
 	FFmpeg    string                    `json:"ffmpeg,omitempty"`
+	CoreAudio string                    `json:"coreaudio,omitempty"`
 	Decode    []CorpusSummary           `json:"decode"`
 	Issues    []IssueState              `json:"issues"`
 	Alloc     []AllocRecord             `json:"alloc,omitempty"`
@@ -40,6 +41,7 @@ type CorpusSummary struct {
 	Fork         map[string]int `json:"fork"`
 	Upstream     map[string]int `json:"upstream"`
 	FFmpeg       map[string]int `json:"ffmpeg_vs_libflac,omitempty"`
+	CoreAudio    map[string]int `json:"coreaudio_vs_libflac,omitempty"`
 	Frames       int64          `json:"fork_frames"`
 	SampleFrames int64          `json:"fork_sample_frames"`
 	NotMatching  []string       `json:"fork_not_matching,omitempty"`
@@ -109,8 +111,20 @@ func cmdSummarize(args []string) error {
 		s.Fork += " => " + v.ForkReplace
 	}
 
-	s.LibFLAC = newLibFLAC().version()
-	s.FFmpeg = newFFmpeg().version()
+	// The tools as version.json saw them (run.sh writes it with the probe);
+	// without the file, as this process sees them, CoreAudio unprobed.
+	s.LibFLAC, s.FFmpeg, s.CoreAudio = v.LibFLAC, v.FFmpeg, v.CoreAudio
+	if s.LibFLAC == "" {
+		s.LibFLAC = newLibFLAC().version()
+	}
+
+	if s.FFmpeg == "" {
+		s.FFmpeg = newFFmpeg().version()
+	}
+
+	if s.CoreAudio == "" {
+		s.CoreAudio = newCoreAudio(nil).version() + " (unprobed)"
+	}
 
 	decode, err := readJSONLines[DecodeRecord](filepath.Join(*dir, "decode.jsonl"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -217,6 +231,14 @@ func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 			inc(c.FFmpeg, r.FFmpegVsLibFLAC)
 		}
 
+		if r.CoreAudioVsLibFLAC != "" {
+			if c.CoreAudio == nil {
+				c.CoreAudio = map[string]int{}
+			}
+
+			inc(c.CoreAudio, r.CoreAudioVsLibFLAC)
+		}
+
 		c.Frames += r.Fork.Frames
 
 		c.SampleFrames += r.Fork.SampleFrames
@@ -249,6 +271,10 @@ func (s *Summary) summarizeDecode(recs []DecodeRecord) {
 
 		for k, n := range c.FFmpeg {
 			s.Verdicts["decode/"+name+"/ffmpeg/"+k] = fmt.Sprint(n)
+		}
+
+		for k, n := range c.CoreAudio {
+			s.Verdicts["decode/"+name+"/coreaudio/"+k] = fmt.Sprint(n)
 		}
 	}
 }
@@ -723,10 +749,11 @@ func (s *Summary) text() string {
 
 	fmt.Fprintf(
 		&b,
-		"\nupstream  %s\nlibFLAC   %s\nffmpeg    %s\ngo        %s\n\n",
+		"\nupstream  %s\nlibFLAC   %s\nffmpeg    %s\ncoreaudio %s\ngo        %s\n\n",
 		s.Upstream,
 		s.LibFLAC,
 		s.FFmpeg,
+		s.CoreAudio,
 		s.Go,
 	)
 	fmt.Fprintf(&b, "Decode, each decoder against libFLAC:\n")
@@ -737,6 +764,10 @@ func (s *Summary) text() string {
 
 		if len(c.FFmpeg) > 0 {
 			fmt.Fprintf(&b, "  %-12s             ffmpeg: %s\n", "", countsText(c.FFmpeg))
+		}
+
+		if len(c.CoreAudio) > 0 {
+			fmt.Fprintf(&b, "  %-12s             coreaudio: %s\n", "", countsText(c.CoreAudio))
 		}
 
 		for _, n := range c.NotMatching {

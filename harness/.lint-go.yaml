@@ -18,6 +18,19 @@ licenses:
 
 golangci:
   linters:
+    settings:
+      # The baseline allows the standard library and the module itself; the
+      # harness also imports the fork it tests, upstream, and agar's CoreAudio
+      # codec (the fifth implementation on the decode lane). A list appends.
+      depguard:
+        rules:
+          main:
+            allow:
+              - github.com/mycophonic/flac
+              - github.com/mycophonic/flac/
+              - github.com/mewkiz/flac
+              - github.com/mewkiz/flac/
+              - github.com/mycophonic/agar/pkg/coreaudio
     exclusions:
       rules:
         # go.mod's local replace is the design, not a shortcut: the harness is
