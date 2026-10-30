@@ -45,7 +45,16 @@ func (block *Block) parseSeekTable() error {
 	table := &SeekTable{Points: make([]SeekPoint, 0, min(n, initialSeekPoints))}
 	block.Body = table
 
-	var prev uint64
+	// The points are sorted in ascending order by sample number and unique
+	// by it, placeholders excepted, and so every placeholder comes after
+	// every real point (RFC 9639, section 8.5). prev is the last real
+	// point's sample number once one has been seen; a placeholder marks the
+	// table's end for real points.
+	var (
+		prev        uint64
+		seenReal    bool
+		placeholder bool
+	)
 
 	for idx := range n {
 		var point SeekPoint
@@ -56,11 +65,22 @@ func (block *Block) parseSeekTable() error {
 		}
 
 		table.Points = append(table.Points, point)
-		// Seek points within a table must be sorted in ascending order by sample
-		// number. Each seek point must have a unique sample number, except for
-		// placeholder points.
+
 		sampleNum := point.SampleNum
-		if idx != 0 && sampleNum != PlaceholderPoint {
+		if sampleNum == PlaceholderPoint {
+			placeholder = true
+
+			continue
+		}
+
+		if placeholder {
+			return fmt.Errorf(
+				"%w: seek point %d (sample %d) after a placeholder, which may only end the table",
+				ErrPlaceholderNotLast, idx, sampleNum,
+			)
+		}
+
+		if seenReal {
 			switch {
 			case sampleNum < prev:
 				return fmt.Errorf(
@@ -72,6 +92,8 @@ func (block *Block) parseSeekTable() error {
 				return fmt.Errorf("meta.Block.parseSeekTable: duplicate seek point with sample number (%d)", sampleNum)
 			}
 		}
+
+		prev, seenReal = sampleNum, true
 	}
 
 	return nil
@@ -91,6 +113,11 @@ type SeekPoint struct {
 	// Number of samples in the target frame.
 	NSamples uint16
 }
+
+// ErrPlaceholderNotLast is returned by parseSeekTable when a real seek point
+// follows a placeholder: placeholders may only end the table (RFC 9639,
+// section 8.5). libFLAC and metaflac accept such a table.
+var ErrPlaceholderNotLast = errors.New("meta.Block.parseSeekTable: a placeholder seek point before a real one")
 
 // PlaceholderPoint represent the sample number used to specify placeholder seek
 // points.
