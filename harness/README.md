@@ -38,7 +38,7 @@ The corpora are generated, not shipped:
 | crafted | 6 | #34: the side channel of a 32-bit frame declares fixed order 4 or LPC order 32 on a one-sample block |
 | control | 6 | the crafted frames at the smallest legal block, order + 1, with a side value only the 33-bit path holds; libFLAC decodes each to L = INT32_MAX, R = INT32_MIN |
 | boundary | 6 | #34 at its edge: order 1 on a one-sample block, which libFLAC refuses |
-| hostile | 14 | one defect each, for #16, #18, #19, #23, #26, #27 and #34; a clean twin; and the three divergences the open decisions #20, #21 and #22 describe |
+| hostile | 14 | one defect each, for #16, #18, #19, #23, #26, #27 and #34; a clean twin; and the three places libFLAC and the fork part ways by decision (#20, #21, #22) |
 
 `wav32/` holds the gen32 signals before libFLAC encodes them. The encoder
 round trip the harness once ran (16, 24 and 32-bit stereo, four channel
@@ -123,9 +123,12 @@ libFLAC:
 
 Under "Issues", the summary gives each issue the harness has a reproducer for
 a state: fixed, not fixed, changed (no longer the reported failure, but not
-libFLAC's decision either), or not tested, with the evidence. The open
-decisions #20, #21 and #22 read "diverges" while the fork keeps its choice,
-or "agrees with libFLAC".
+libFLAC's decision either), or not tested, with the evidence. The three
+decisions read their decided state while the fork keeps its choice: #22
+"correct, libFLAC lenient" (RFC 9639 section 9.1.5 decodes the frame number
+by RFC 3629 section 3, which refuses the overlong form), #20 and #21
+"decided" (verification is opt-in, #56; a frame stream gets its own entry
+point, #55); a move toward libFLAC reads "agrees with libFLAC".
 
 Expected on every commit: upstream refuses 32-bit frames, so its
 `extra_error` on gen32 and control is no finding. libFLAC's raw output takes
