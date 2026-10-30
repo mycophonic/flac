@@ -403,20 +403,42 @@ var decodeRules = []decodeRule{
 	},
 }
 
-// divergenceRules are libFLAC's decisions the fork does not take, each an
-// open issue: want is the fork's verdict while it stands.
-var divergenceRules = []decodeRule{
+// decisionRule is a place where libFLAC and the fork part ways by a decision
+// the fork has made: want is the fork's verdict, state the row's state while
+// the fork keeps it, with the decision's ground in the text.
+type decisionRule struct {
+	decodeRule
+
+	state string
+}
+
+// decisionRules are those decisions. The fork's verdict is the want on each,
+// so a move toward libFLAC's reads "agrees with libFLAC" and anything else
+// "changed"; neither is the decided state.
+var decisionRules = []decisionRule{
 	{
-		"#20", "a wrong STREAMINFO MD5: libFLAC refuses the stream, the fork does not check (md5_only)",
-		inCorpus("hostile", "md5-wrong.flac"), "md5_only", "", nil,
+		decodeRule{
+			"#20", "a wrong STREAMINFO MD5: libFLAC refuses the stream, the fork does not check (md5_only); " +
+				"verification is opt-in and reports at the end of the stream (#56)",
+			inCorpus("hostile", "md5-wrong.flac"), "md5_only", "", nil,
+		},
+		"decided",
 	},
 	{
-		"#21", "a stream starting at a frame header: libFLAC syncs to it, the fork refuses (extra_error)",
-		inCorpus("hostile", "no-flac-marker.flac"), "extra_error", "", nil,
+		decodeRule{
+			"#21", "a stream starting at a frame header: libFLAC syncs to it, Open refuses (extra_error); " +
+				"RFC 9639 sections 6 and 8 require the marker, a frame stream gets its own entry point (#55)",
+			inCorpus("hostile", "no-flac-marker.flac"), "extra_error", "", nil,
+		},
+		"decided",
 	},
 	{
-		"#22", "an overlong UTF-8 frame number: libFLAC accepts it, the fork refuses (extra_error)",
-		inCorpus("hostile", "frame-number-overlong.flac"), "extra_error", "", nil,
+		decodeRule{
+			"#22", "an overlong UTF-8 frame number: libFLAC accepts it, the fork refuses (extra_error); " +
+				"RFC 9639 section 9.1.5 decodes by RFC 3629 section 3, which MUST refuse the overlong form",
+			inCorpus("hostile", "frame-number-overlong.flac"), "extra_error", "", nil,
+		},
+		"correct, libFLAC lenient",
 	},
 }
 
@@ -505,8 +527,8 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 
 		s.addIssue(is)
 	}
-	// Divergences from libFLAC that open decisions record.
-	for _, rule := range divergenceRules {
+	// Where libFLAC and the fork part ways by decision.
+	for _, rule := range decisionRules {
 		var rs []DecodeRecord
 
 		for _, r := range decode {
@@ -526,7 +548,7 @@ func (s *Summary) summarizeIssues(decode []DecodeRecord, alloc []AllocRecord, se
 		case len(rs) == 0:
 			is.State = "not tested"
 		case m[rule.want] == len(rs):
-			is.State = "diverges"
+			is.State = rule.state
 		case m["match"]+m["both_refuse"] == len(rs):
 			is.State = "agrees with libFLAC"
 		default:
@@ -778,7 +800,7 @@ func (s *Summary) text() string {
 	fmt.Fprintf(&b, "\nIssues:\n")
 
 	for _, is := range s.Issues {
-		fmt.Fprintf(&b, "  %-9s %-10s %s\n            %s\n", is.Issue, is.State, is.What, is.Evidence)
+		fmt.Fprintf(&b, "  %-9s %-24s %s\n            %s\n", is.Issue, is.State, is.What, is.Evidence)
 	}
 
 	if s.Seek != nil {
