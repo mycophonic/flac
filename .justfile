@@ -21,10 +21,18 @@ fix: do::fix::default do::fix::go::default fix-harness
 [doc('Run the Go test suite: unit, race, cover')]
 test: do::test::go::unit do::test::go::race do::test::go::cover
 
-# The shared security scans (govulncheck, for a Go module); the security
-# workflow runs this recipe.
-[doc('Run the security scans')]
-security: do::security::default
+# The shared security scans (govulncheck, for a Go module) and the harness
+# module's, which the shared lane's `./...` from the root does not enter; the
+# security workflow runs this recipe.
+[doc('Run the security scans, the harness module included')]
+security: do::security::default security-harness
+
+# govulncheck on the harness module (#62): the same pinned tool, the same
+# vulnerability database and the same platforms as the shared lane, run in
+# harness/, whose dependency graph (upstream mewkiz/flac and its helpers,
+# agar's codec) the root module's scan never sees.
+[doc('Scan the harness module for known vulnerabilities')]
+security-harness: (do::security::go::_banner "security harness" "go") (do::security::go::_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") do::security::go::_vulndb (do::security::go::_per-platform harness_run + ' "$LIMEN_BUILD/tools/govulncheck" -db "$(cat "$LIMEN_BUILD/vulndb.url")" ./...')
 
 # The differential harness (harness/README.md): decode and seek against
 # libFLAC and upstream mewkiz/flac, each finding mapped to its issue.
