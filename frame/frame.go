@@ -348,10 +348,20 @@ func (frame *Frame) parseHeader() error {
 		return err
 	}
 
+	// The allowance holds for one header: the first after the metadata, where
+	// some files (HDtracks releases, 16 MB of zeros after their metadata)
+	// carry undeclared zero padding that libFLAC refuses and this decoder
+	// scans past. Between frames, zeros are lost data, and a resync over
+	// them would hide corruption from every caller: refused, as the
+	// reference refuses them.
+	leadingZeros := br.LeadingZerosAllowed()
+
 	switch x {
 	case 0:
-		// All zeros: undeclared zero padding before the first audio frame
-		// (e.g. HDtracks FLAC files with 16 MB of zeros after metadata).
+		if !leadingZeros {
+			return ErrInvalidSync
+		}
+
 		// Scan forward to the real sync code. On return, the reserved and
 		// blocking strategy bits have been consumed.
 		if err := frame.scanToSync(); err != nil {
@@ -457,13 +467,14 @@ func (frame *Frame) parseHeader() error {
 	return nil
 }
 
-// scanToSync scans forward through undeclared zero padding to locate the next
-// FLAC frame sync code.
+// scanToSync scans forward through undeclared zero padding to locate the
+// first FLAC frame sync code.
 //
 // Some FLAC files (e.g. from HDtracks) contain large blocks of zero bytes
 // between the last metadata block and the first audio frame that are not
 // declared as FLAC Padding metadata. Standard decoders (libFLAC, ffmpeg) fail
-// on these files because they expect audio frames immediately after metadata.
+// on these files because they expect audio frames immediately after metadata;
+// this decoder scans past them there, and nowhere else.
 //
 // Precondition: the caller's Read(14) returned all zeros, leaving 2 zero bits
 // buffered. On return, the full 16-bit sync word (sync code + reserved +

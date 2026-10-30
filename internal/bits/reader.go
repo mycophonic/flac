@@ -27,6 +27,11 @@ type Reader struct {
 	x uint8
 	// The number of buffered bits in x.
 	n uint
+	// leadingZeros allows the next frame header to scan past zero bytes to
+	// its sync code: set by the stream once, after its metadata, for the
+	// undeclared zero padding some files carry before their first frame,
+	// and cleared by the first header read. Zeros anywhere else are refused.
+	leadingZeros bool
 	// CRC state — computed on bytes as they are consumed, not as they enter
 	// the buffer. This allows read-ahead buffering without corrupting CRC.
 	crc16   uint16
@@ -349,4 +354,22 @@ func (a *byteReaderAdapter) Read(p []byte) (int, error) {
 	}
 
 	return len(p), nil
+}
+
+// AllowLeadingZeros lets the next frame header scan past zero bytes to its
+// sync code, once: the stream calls it after its metadata, for undeclared
+// zero padding before the first frame.
+func (br *Reader) AllowLeadingZeros() { br.leadingZeros = true }
+
+// ClearLeadingZeros withdraws the allowance: the stream calls it when a seek
+// lands anywhere but the start of the audio data.
+func (br *Reader) ClearLeadingZeros() { br.leadingZeros = false }
+
+// LeadingZerosAllowed reports whether the next frame header may scan past
+// zero bytes, and clears the allowance: it holds for one header.
+func (br *Reader) LeadingZerosAllowed() bool {
+	allowed := br.leadingZeros
+	br.leadingZeros = false
+
+	return allowed
 }
