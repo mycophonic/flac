@@ -106,6 +106,7 @@ func New(r io.Reader) (stream *Stream, err error) {
 
 	// Create persistent bit reader for frame parsing.
 	stream.br = bits.NewReader(r)
+	stream.br.AllowLeadingZeros()
 	stream.initDecodeBuffers()
 
 	return stream, nil
@@ -156,6 +157,7 @@ func NewSeek(rs io.ReadSeeker) (stream *Stream, err error) {
 
 	// Create persistent bit reader for frame parsing.
 	stream.br = bits.NewReader(br)
+	stream.br.AllowLeadingZeros()
 	stream.initDecodeBuffers()
 
 	return stream, err
@@ -319,6 +321,7 @@ func Parse(r io.Reader) (stream *Stream, err error) {
 
 	// Create persistent bit reader for frame parsing.
 	stream.br = bits.NewReader(r)
+	stream.br.AllowLeadingZeros()
 	stream.initDecodeBuffers()
 
 	return stream, nil
@@ -598,12 +601,13 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 		)
 	}
 
-	if _, err := stream.br.Seek(
-		stream.dataStart+int64(point.Offset), // #nosec G115 -- point.Offset overflow validated above
-		io.SeekStart,
-	); err != nil {
+	target := stream.dataStart + int64(point.Offset) // #nosec G115 -- point.Offset overflow validated above
+
+	if _, err := stream.br.Seek(target, io.SeekStart); err != nil {
 		return 0, err
 	}
+
+	stream.zerosAllowance(target)
 
 	// Reset the decoded sample counter to the seek point's starting sample.
 	// The loop below calls ParseNext to scan forward from the seek point to
@@ -643,6 +647,21 @@ func (stream *Stream) Seek(sampleNum uint64) (uint64, error) {
 	}
 }
 
+// zerosAllowance sets the bit reader's allowance for zero bytes before a
+// frame header by the position the reader was just moved to: the scan past
+// undeclared padding holds at the start of the audio data only, the one
+// place the decision covers, whichever way the reader arrives there, and is
+// withdrawn anywhere else, where zeros are the invalid sync they are.
+func (stream *Stream) zerosAllowance(pos int64) {
+	if pos == stream.dataStart {
+		stream.br.AllowLeadingZeros()
+
+		return
+	}
+
+	stream.br.ClearLeadingZeros()
+}
+
 // searchFromStart searches for the given sample number using binary search and
 // returns the last seek point whose start sample is at or before sampleNum. If
 // sampleNum is before the first seek point, a zero seek point (SampleNum: 0,
@@ -679,6 +698,8 @@ func (stream *Stream) makeSeekTable() (err error) {
 	if _, err = stream.br.Seek(stream.dataStart, io.SeekStart); err != nil {
 		return err
 	}
+
+	stream.zerosAllowance(stream.dataStart)
 
 	// Save and restore samplesDecoded around the scan. makeSeekTable is an
 	// internal operation that parses every frame to build seek points — it
@@ -724,6 +745,7 @@ func (stream *Stream) makeSeekTable() (err error) {
 
 	// Restore original position.
 	_, err = stream.br.Seek(pos, io.SeekStart)
+	stream.zerosAllowance(pos)
 
 	return err
 }

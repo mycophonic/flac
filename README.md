@@ -80,9 +80,11 @@ size does not divide, and a garbage block type. A stream cut inside its metadata
 reports the cut rather than opening as a clean, empty stream; a second
 STREAMINFO and a seek table of a stray length are refused. The metadata parsers
 allocate within the block, never a declared length, so a hundred-byte stream
-cannot ask for gigabytes and a short string costs its length. Zero bytes before
-a frame's sync code, undeclared padding, are scanned past, up to 32 MB; an
-ID3v2 tag before the stream is skipped, as before.
+cannot ask for gigabytes and a short string costs its length. Zero bytes
+between the metadata and the first frame, undeclared padding some releases
+carry, are scanned past, up to 32 MB; zeros anywhere else, lost data, are
+refused as the reference refuses them. An ID3v2 tag before the stream is
+skipped, as before.
 
 **Seeking.** `Seek` lands on the frame holding the sample: the buffered reader
 serves fresh bytes after a direct read, sample numbers come from the stream, and

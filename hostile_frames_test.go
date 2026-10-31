@@ -68,6 +68,7 @@ type hostileFrame struct {
 	crc16                *uint16
 	streamBPS            uint8
 	channels             uint64 // STREAMINFO's channel count; 1 unless set
+	streamSamples        uint64 // STREAMINFO's sample count; 16 unless set
 	streamMinMax         uint16
 }
 
@@ -104,7 +105,7 @@ func (h hostileFrame) build() []byte {
 	meta.put(44100, 20)
 	meta.put(max(h.channels, 1)-1, 3) // channels
 	meta.put(uint64(h.streamBPS-1), 5)
-	meta.put(16, 36) // 16 samples
+	meta.put(max(h.streamSamples, 16), 36) // the samples, one frame's unless set
 	meta.bytes(make([]byte, 16))
 
 	var hdr bitSink
