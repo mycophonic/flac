@@ -108,7 +108,9 @@ func TestEncoderAgainstTheReference(t *testing.T) {
 		}
 	}
 
-	for _, bps := range []int{4, 8, 12, 16, 20, 24, 32} {
+	// The odd depths have no header code of their own: their frames say
+	// "from STREAMINFO", and Frame.Hash takes them at the next whole byte.
+	for _, bps := range []int{4, 5, 8, 9, 12, 13, 16, 17, 20, 24, 25, 32} {
 		for _, blockSize := range []int{16, 1152, 4096} {
 			for _, v := range variants {
 				t.Run(fmt.Sprintf("%dbit/block%d/%s", bps, blockSize, v.name), func(t *testing.T) {

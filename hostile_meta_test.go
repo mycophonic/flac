@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/mycophonic/flac"
+	"github.com/mycophonic/flac/meta"
 )
 
 // be32 and le32 append a 32-bit number.
@@ -41,6 +42,42 @@ func streamWith(block []byte) []byte {
 	out = append(out, block...)
 
 	return append(out, whole[42:]...)
+}
+
+// placeholderFirst is a seek table with a placeholder before two real
+// points, at samples 0 and 16.
+func placeholderFirst() []byte {
+	return append(lastBlock(3, 54), seekPoints(
+		[3]uint64{meta.PlaceholderPoint, 0, 0}, [3]uint64{0, 0, 16}, [3]uint64{16, 100, 16},
+	)...)
+}
+
+// A placeholder before real seek points is refused, through the stream,
+// for being out of place (RFC 9639 section 8.5), the sentinel reaching
+// the caller, not mistaken for a duplicate of a point that is not there.
+func TestPlaceholderBeforeRealSeekPointsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	err := parseOutcome(streamWith(placeholderFirst()))
+	if err == nil {
+		t.Fatal("a placeholder before real seek points was accepted")
+	}
+
+	if !errors.Is(err, meta.ErrPlaceholderNotLast) {
+		t.Fatalf("refused, but not for the placeholder out of place: %v", err)
+	}
+}
+
+// seekPoints is a seek table body: sample number, offset, frame samples.
+func seekPoints(points ...[3]uint64) []byte {
+	var b []byte
+	for _, p := range points {
+		b = binary.BigEndian.AppendUint64(b, p[0])
+		b = binary.BigEndian.AppendUint64(b, p[1])
+		b = binary.BigEndian.AppendUint16(b, uint16(p[2]))
+	}
+
+	return b
 }
 
 // vorbis is a Vorbis comment block body with an empty vendor string.
@@ -165,6 +202,11 @@ func TestHostileMetadataAgainstTheReference(t *testing.T) {
 			append(lastBlock(3, 0xFFFFFF), make([]byte, 36)...),
 			true,
 		},
+		// A placeholder point, then real ones: RFC 9639 section 8.5 has the
+		// placeholders all at the end of the table, so this is refused, for
+		// that reason (TestPlaceholderBeforeRealSeekPointsIsRefused); libFLAC
+		// and metaflac are lenient, logged here.
+		{"a placeholder seek point before real ones", placeholderFirst(), false},
 		{
 			"a seek table whose length is not a multiple of 18",
 			append(lastBlock(3, 20), make([]byte, 20)...),
