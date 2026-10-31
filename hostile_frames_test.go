@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mycophonic/flac"
@@ -202,6 +203,38 @@ func decodeOutcome(data []byte) (err error) {
 	return err
 }
 
+// headerOutcome is decodeOutcome through Next and Frame.Parse.
+func headerOutcome(data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%w: %v", errPanic, r)
+		}
+	}()
+
+	stream, err := flac.New(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = stream.Close() }()
+
+	f, err := stream.Next()
+	if err != nil {
+		return err
+	}
+
+	if parseErr := f.Parse(); parseErr != nil {
+		return parseErr
+	}
+
+	_, err = stream.Next()
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+
+	return err
+}
+
 // referenceAccepts is `flac -t`'s decision.
 func referenceAccepts(t *testing.T, flacBin string, data []byte) bool {
 	t.Helper()
@@ -212,6 +245,21 @@ func referenceAccepts(t *testing.T, flacBin string, data []byte) bool {
 	}
 
 	return exec.CommandContext(t.Context(), flacBin, "-t", "-s", path).Run() == nil
+}
+
+// checkNamed is the check a row exists for, named by the refusal on both
+// paths, so a check removed is not hidden by a payload that fails later.
+func checkNamed(row string) string {
+	switch row {
+	case "sample size 24 bits over a 16-bit STREAMINFO":
+		return "bit depth mismatch"
+	case "a mono frame over a 2-channel STREAMINFO":
+		return "channel count mismatch"
+	case "sample rate 32 kHz against STREAMINFO's 44.1":
+		return "sample rate mismatch"
+	default:
+		return ""
+	}
 }
 
 func u8(v uint8) *uint8    { return &v }
@@ -253,6 +301,12 @@ func TestHostileFramesAgainstTheReference(t *testing.T) {
 		{"channel assignment 1011 (reserved)", func(h *hostileFrame) { h.channelCode = 11 }, true},
 		{"channel assignment 1111 (reserved)", func(h *hostileFrame) { h.channelCode = 15 }, true},
 		{"sample size 011 (reserved)", func(h *hostileFrame) { h.bpsCode = 3 }, true},
+		// The frame's own depth, channel count and sample rate are held to
+		// STREAMINFO's by Next and by ParseNext alike; a frame deferring to
+		// STREAMINFO (code 000) is resolved by both.
+		{"sample size 24 bits over a 16-bit STREAMINFO", func(h *hostileFrame) { h.bpsCode = 6 }, true},
+		{"sample size from STREAMINFO (code 000)", func(h *hostileFrame) { h.bpsCode = 0 }, true},
+		{"a mono frame over a 2-channel STREAMINFO", func(h *hostileFrame) { h.channels = 2 }, true},
 		{"reserved bit after the sync set", func(h *hostileFrame) { h.reserved1 = 1 }, true},
 		{"reserved bit before the number set", func(h *hostileFrame) { h.reserved2 = 1 }, true},
 		// libFLAC accepts an overlong UTF-8 coding of the frame number; this
@@ -465,6 +519,26 @@ func TestHostileFramesAgainstTheReference(t *testing.T) {
 			ours := decodeOutcome(data)
 			if errors.Is(ours, errPanic) || errors.Is(ours, io.EOF) {
 				t.Fatalf("the decoder: %v", ours)
+			}
+
+			// Next then Frame.Parse reads the same frame and must decide as
+			// ParseNext does; where a row names the check, both must refuse
+			// for that check, not for whatever the payload does next.
+			headers := headerOutcome(data)
+			if errors.Is(headers, errPanic) || (headers == nil) != (ours == nil) {
+				t.Fatalf("Next then Parse: %v; ParseNext: %v", headers, ours)
+			}
+
+			if reason := checkNamed(c.name); reason != "" {
+				if ours == nil || !strings.Contains(ours.Error(), reason) ||
+					!strings.Contains(headers.Error(), reason) {
+					t.Fatalf(
+						"the refusal must name %q on both paths; ParseNext: %v; Next then Parse: %v",
+						reason,
+						ours,
+						headers,
+					)
+				}
 			}
 
 			if flacBin == "" {
