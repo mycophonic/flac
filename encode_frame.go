@@ -20,6 +20,10 @@ import (
 // fit the int32 samples.
 const wideBitsPerSample = 32
 
+// errSampleSize is a sample size the format does not have: below 4 or above
+// 32 bits (RFC 9639, section 8.2).
+var errSampleSize = errors.New("sample size outside the format's 4 to 32 bits")
+
 // WriteFrame encodes the given audio frame to the output stream. The Num field
 // of the frame header is automatically calculated by the encoder.
 //
@@ -516,11 +520,6 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	var bits uint64
 
 	switch bps {
-	case 0, 4:
-		// 000 : get from STREAMINFO metadata block. A 4-bit sample size
-		// has no code of its own (RFC 9639, section 9.1.4): STREAMINFO
-		// carries it and the header defers to it.
-		bits = 0x0
 	case 8:
 		// 001 : 8 bits per sample
 		bits = 0x1
@@ -539,8 +538,14 @@ func encodeFrameHeaderBitsPerSample(bw *bitio.Writer, bps uint8) error {
 	case 32:
 		// 111 : 32 bits per sample (RFC 9639)
 		bits = 0x7
+	case 0, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 25, 26, 27, 28, 29, 30, 31:
+		// 000 : get from STREAMINFO metadata block. The format allows every
+		// depth from 4 to 32 (RFC 9639, section 8.2) and codes six of them in
+		// the header (section 9.1.4); the rest STREAMINFO carries and the
+		// header defers to, as the decoder reads them.
+		bits = 0x0
 	default:
-		return fmt.Errorf("support for sample size %v not yet implemented", bps)
+		return fmt.Errorf("%w: %d bits", errSampleSize, bps)
 	}
 
 	if err := bw.WriteBits(bits, 3); err != nil {
